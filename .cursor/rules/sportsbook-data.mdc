@@ -1,0 +1,28 @@
+---
+description: Mock DB plus SharedPreferences persistence for viva demos
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# State and persistence
+
+Use mock database services backed by `SharedPreferences`. All CRUD must work, stay reactive, and survive app restarts for the live viva.
+
+## Rules
+
+- Put mock services in `lib/core/` (or a feature `data/` folder that writes through the mock DB).
+- Every create/update/delete must persist immediately, then notify listeners (`ChangeNotifier` / `Provider`).
+- Do not use in-memory-only lists as the source of truth.
+- Seed once if storage is empty; never wipe user data on hot restart.
+
+```dart
+// ❌ BAD
+final courts = <Court>[]; // lost on restart
+
+// ✅ GOOD
+class MockDatabase extends ChangeNotifier {
+  Future<void> upsertCourt(Court court) async {
+    // write JSON to SharedPreferences, then notifyListeners()
+  }
+}
+```

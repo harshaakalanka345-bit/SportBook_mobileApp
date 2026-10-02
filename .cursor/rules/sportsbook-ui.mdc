@@ -1,0 +1,36 @@
+---
+description: SportsBook UI colors, radius, and interaction feedback
+globs: lib/**/*.dart
+alwaysApply: false
+---
+
+# SportsBook UI
+
+## Tokens
+
+- Primary: `#0066FF` (vibrant sports blue)
+- Surfaces: `#F7FAFC` / `#FFFFFF`
+- Card border: `#E2E8F0`
+- Text: `#1A202C` (charcoal), `#718096` (muted grey)
+- Radius: `16`–`24` for cards and pill tags
+
+Use `lib/core/app_theme.dart` — do not hardcode scattered hex values.
+
+## Feedback
+
+Every button, text field, and tab must show explicit pressed/focused/selected/disabled states.
+
+```dart
+// ❌ BAD
+Card(child: content)
+
+// ✅ GOOD
+Card(
+  color: AppColors.surface,
+  shape: RoundedRectangleBorder(
+    borderRadius: BorderRadius.circular(16),
+    side: const BorderSide(color: AppColors.border),
+  ),
+  child: content,
+)
+```

@@ -1,0 +1,33 @@
+---
+description: SportsBook feature-first Flutter architecture
+alwaysApply: true
+---
+
+# SportsBook architecture
+
+Badminton/sports court reservation app for Colombo, Sri Lanka. Flutter (Dart), clean and modular.
+
+## Layout
+
+```
+lib/features/auth/        # Splash, Auth, Profile, Wallet
+lib/features/discovery/   # Dashboard, Search, Filters, Empty State
+lib/features/booking/     # 4-step checkout, Turnstile QR, Fault Report
+lib/features/partners/    # Matchmaker Beacon, Bookings, Reschedule, Reviews
+lib/core/                 # Theme, navigation, shared models, mock database
+```
+
+## Rules
+
+- Put screens, widgets, and feature state under the matching `lib/features/<name>/` folder. Do not dump screens in `lib/` root.
+- Shared types, theme, routing, and mock DB live in `lib/core/` only.
+- Keep features independent: import other features only through `lib/core` contracts when needed.
+- Prefer small files: one screen or one service per file.
+
+```dart
+// ❌ BAD
+lib/screens/checkout.dart
+
+// ✅ GOOD
+lib/features/booking/checkout/checkout_screen.dart
+```
