@@ -4,7 +4,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
 import 'core/main_wrapper.dart';
-import 'core/mock_database.dart';
 import 'core/supabase_config.dart';
 import 'core/supabase_service.dart';
 import 'features/auth/splash_screen.dart';
@@ -18,15 +17,9 @@ Future<void> main() async {
     publishableKey: SupabaseConfig.publishableKey,
   );
 
-  final database = MockDatabase();
-  await database.init();
-
   runApp(
-    MultiProvider(
-      providers: [
-        ChangeNotifierProvider.value(value: database),
-        Provider(create: (_) => SupabaseService()),
-      ],
+    Provider<SupabaseService>(
+      create: (_) => SupabaseService(),
       child: const SportsBookApp(),
     ),
   );

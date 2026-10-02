@@ -1,29 +1,36 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
-import 'package:sportsbook_mobile/core/mock_database.dart';
+import 'package:sportsbook_mobile/core/supabase_config.dart';
 import 'package:sportsbook_mobile/main.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   GoogleFonts.config.allowRuntimeFetching = false;
 
-  testWidgets('SportsBook home tab lists seeded courts', (tester) async {
+  testWidgets('SportsBook renders navigation bar tabs', (tester) async {
     SharedPreferences.setMockInitialValues({});
-    final database = MockDatabase();
-    await database.init();
+    try {
+      await Supabase.initialize(
+        url: SupabaseConfig.url,
+        publishableKey: SupabaseConfig.publishableKey,
+        authOptions: const FlutterAuthClientOptions(autoRefreshToken: false),
+      );
+    } catch (_) {
+      // Supabase already initialized in test environment
+    }
 
     await tester.pumpWidget(
-      ChangeNotifierProvider.value(
-        value: database,
-        child: const SportsBookApp(showSplash: false),
-      ),
+      const SportsBookApp(showSplash: false),
     );
+    await tester.pump();
 
-    expect(find.text('SportsBook'), findsNothing);
     expect(find.text('Discover'), findsOneWidget);
-    expect(find.text('Royal Indoor Badminton'), findsOneWidget);
     expect(find.text('Home'), findsOneWidget);
+    expect(find.text('Search'), findsOneWidget);
+    expect(find.text('Book'), findsOneWidget);
+    expect(find.text('Partners'), findsOneWidget);
+    expect(find.text('Profile'), findsOneWidget);
   });
 }
