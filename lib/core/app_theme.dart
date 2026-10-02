@@ -16,6 +16,8 @@ class AppRadii {
 }
 
 class AppTheme {
+  static ThemeData get lightTheme => light();
+
   static ThemeData light() {
     final textTheme = ThemeData.light().textTheme.apply(
       bodyColor: AppColors.text,
