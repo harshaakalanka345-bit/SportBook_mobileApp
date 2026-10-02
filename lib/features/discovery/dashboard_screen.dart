@@ -186,8 +186,55 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: RefreshIndicator(
         onRefresh: () async => setState(() {}),
         child: ListView(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
           children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Find your next game',
+                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                              fontWeight: FontWeight.w800,
+                            ),
+                      ),
+                      const SizedBox(height: 4),
+                      const Text('Courts and venues near Colombo', style: TextStyle(color: AppColors.muted)),
+                    ],
+                  ),
+                ),
+                CircleAvatar(
+                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
+                  child: const Icon(Icons.person_rounded, color: AppColors.primary),
+                ),
+              ],
+            ),
+            const SizedBox(height: 18),
+            Container(
+              padding: const EdgeInsets.all(18),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(
+                children: [
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Play more, pay less', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
+                        SizedBox(height: 5),
+                        Text('Book your first court and save 15%', style: TextStyle(color: Colors.white70)),
+                      ],
+                    ),
+                  ),
+                  Icon(Icons.sports_tennis_rounded, color: Colors.white38, size: 54),
+                ],
+              ),
+            ),
+            const SizedBox(height: 22),
             // Environment Filter
             SingleChildScrollView(
               scrollDirection: Axis.horizontal,
