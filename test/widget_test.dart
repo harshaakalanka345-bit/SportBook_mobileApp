@@ -22,7 +22,7 @@ void main() {
     }
 
     await tester.pumpWidget(
-      const SportsBookApp(showSplash: false),
+      const SportsBookApp(showSplash: false, showOnboarding: false),
     );
     await tester.pump();
 

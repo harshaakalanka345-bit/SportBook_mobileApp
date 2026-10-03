@@ -17,18 +17,11 @@ class SupabaseService {
     String password,
     String fullName,
   ) async {
-    final response = await _client.auth.signUp(
+    return await _client.auth.signUp(
       email: email,
       password: password,
       data: {'full_name': fullName},
     );
-    if (response.user != null) {
-      await _client.from('profiles').upsert({
-        'id': response.user!.id,
-        'full_name': fullName,
-      });
-    }
-    return response;
   }
 
   // Sign In with Email & Password

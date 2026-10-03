@@ -28,15 +28,15 @@ class _MainWrapperState extends State<MainWrapper> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: IndexedStack(index: _index, children: _tabs),
+      body: _tabs[_index],
       bottomNavigationBar: NavigationBar(
         selectedIndex: _index,
         onDestinationSelected: (value) => setState(() => _index = value),
         destinations: const [
           NavigationDestination(
-            icon: Icon(Icons.home_outlined),
-            selectedIcon: Icon(Icons.home_rounded),
-            label: 'Home',
+            icon: Icon(Icons.grid_view_outlined),
+            selectedIcon: Icon(Icons.grid_view_rounded),
+            label: 'Courts',
           ),
           NavigationDestination(
             icon: Icon(Icons.search_outlined),
@@ -46,7 +46,7 @@ class _MainWrapperState extends State<MainWrapper> {
           NavigationDestination(
             icon: Icon(Icons.calendar_today_outlined),
             selectedIcon: Icon(Icons.calendar_today_rounded),
-            label: 'Book',
+            label: 'Bookings',
           ),
           NavigationDestination(
             icon: Icon(Icons.groups_outlined),

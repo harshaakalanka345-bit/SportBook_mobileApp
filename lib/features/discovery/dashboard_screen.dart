@@ -12,399 +12,288 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   final _service = SupabaseService();
-  String _selectedEnvironment = 'All';
-  String _selectedSport = 'All';
+  String _selectedSport = 'Badminton';
 
-  final _environments = const ['All', 'Indoor', 'Outdoor'];
-  final _sports = const ['All', 'Badminton', 'Tennis', 'Futsal'];
+  static const _ink = Color(0xFF11182D);
+  static const _muted = Color(0xFF697083);
+  static const _softBlue = Color(0xFFF0F3FF);
+  static const _venueImages = [
+    'https://images.unsplash.com/photo-1595435934249-5df7ed86e1c0?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?auto=format&fit=crop&w=900&q=80',
+    'https://images.unsplash.com/photo-1554068865-24cecd4e34b8?auto=format&fit=crop&w=900&q=80',
+  ];
 
   Future<List<Map<String, dynamic>>> _loadVenues() {
-    return _service.getVenues(
-      sport: _selectedSport,
-      environment: _selectedEnvironment,
-    );
-  }
-
-  void _showVenueDetails(Map<String, dynamic> venue) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      builder: (ctx) {
-        final amenities = (venue['amenities'] as List?)?.cast<String>() ?? [];
-        final hourlyRate = venue['hourly_rate'] ?? 1500;
-
-        return Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.border,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Expanded(
-                    child: Text(
-                      venue['name'] ?? 'Venue',
-                      style: Theme.of(ctx).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700,
-                          ),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 4,
-                    ),
-                    decoration: BoxDecoration(
-                      color: AppColors.primary.withValues(alpha: 0.1),
-                      borderRadius: BorderRadius.circular(AppRadii.pill),
-                    ),
-                    child: Text(
-                      venue['environment'] ?? 'Indoor',
-                      style: const TextStyle(
-                        color: AppColors.primary,
-                        fontWeight: FontWeight.w600,
-                        fontSize: 12,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              Text(
-                '${venue['area']} · ${venue['sport']}',
-                style: const TextStyle(color: AppColors.muted),
-              ),
-              const SizedBox(height: 8),
-              Text(
-                venue['address'] ?? 'Colombo, Sri Lanka',
-                style: Theme.of(ctx).textTheme.bodySmall?.copyWith(
-                      color: AppColors.muted,
-                    ),
-              ),
-              const SizedBox(height: 16),
-              if (amenities.isNotEmpty) ...[
-                const Text(
-                  'Amenities',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: amenities
-                      .map(
-                        (a) => Chip(
-                          label: Text(a, style: const TextStyle(fontSize: 12)),
-                          backgroundColor: AppColors.surfaceMuted,
-                          side: const BorderSide(color: AppColors.border),
-                        ),
-                      )
-                      .toList(),
-                ),
-                const SizedBox(height: 16),
-              ],
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  const Text('Rate per hour:'),
-                  Text(
-                    'LKR $hourlyRate',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: AppColors.primary,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 20),
-              FilledButton(
-                onPressed: () {
-                  Navigator.pop(ctx);
-                  _quickBookVenue(venue);
-                },
-                child: const Text('Book Court'),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  Future<void> _quickBookVenue(Map<String, dynamic> venue) async {
-    final ref = 'SB-${DateTime.now().millisecondsSinceEpoch.toString().substring(7)}';
-    final pin = (1000 + (DateTime.now().millisecondsSinceEpoch % 9000)).toString();
-    final rate = (venue['hourly_rate'] as num?)?.toDouble() ?? 1500.0;
-
-    try {
-      await _service.createBooking(
-        venueId: venue['id'] ?? 'ven-01',
-        bookingRef: ref,
-        courtName: '${venue['name']} - Court 1',
-        dateSchedule: DateTime.now().toString().split(' ')[0],
-        timeSlot: '06:00 PM - 07:00 PM',
-        totalPaid: rate,
-        qrPin: pin,
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Booking Confirmed! Ref: $ref'),
-          backgroundColor: Colors.green.shade700,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Booking error: $e')),
-      );
-    }
+    return _service.getVenues(sport: _selectedSport);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('Discover'),
-      ),
-      body: RefreshIndicator(
-        onRefresh: () async => setState(() {}),
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 10, 20, 28),
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Find your next game',
-                        style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                              fontWeight: FontWeight.w800,
-                            ),
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Courts and venues near Colombo', style: TextStyle(color: AppColors.muted)),
-                    ],
-                  ),
+      backgroundColor: const Color(0xFFFAF8FF),
+      body: SafeArea(
+        child: RefreshIndicator(
+          onRefresh: () async => setState(() {}),
+          child: CustomScrollView(
+            physics: const AlwaysScrollableScrollPhysics(),
+            slivers: [
+              SliverToBoxAdapter(child: _buildHeader()),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildBookingCard(),
+                    const SizedBox(height: 26),
+                    _buildCategories(),
+                    const SizedBox(height: 28),
+                    _buildOffer(),
+                    const SizedBox(height: 28),
+                    _buildNearbyHeader(),
+                    const SizedBox(height: 14),
+                    _buildVenues(),
+                    const SizedBox(height: 26),
+                    const _PartnerFooter(),
+                  ]),
                 ),
-                CircleAvatar(
-                  backgroundColor: AppColors.primary.withValues(alpha: 0.12),
-                  child: const Icon(Icons.person_rounded, color: AppColors.primary),
-                ),
-              ],
-            ),
-            const SizedBox(height: 18),
-            Container(
-              padding: const EdgeInsets.all(18),
-              decoration: BoxDecoration(
-                color: AppColors.primary,
-                borderRadius: BorderRadius.circular(20),
               ),
-              child: Row(
-                children: [
-                  const Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text('Play more, pay less', style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w800)),
-                        SizedBox(height: 5),
-                        Text('Book your first court and save 15%', style: TextStyle(color: Colors.white70)),
-                      ],
-                    ),
-                  ),
-                  Icon(Icons.sports_tennis_rounded, color: Colors.white38, size: 54),
-                ],
-              ),
-            ),
-            const SizedBox(height: 22),
-            // Environment Filter
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _environments.map((env) {
-                  final isSelected = _selectedEnvironment == env;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(env),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        if (selected) {
-                          setState(() => _selectedEnvironment = env);
-                        }
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 10),
-            // Sport Filter
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: _sports.map((sport) {
-                  final isSelected = _selectedSport == sport;
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: ChoiceChip(
-                      label: Text(sport),
-                      selected: isSelected,
-                      onSelected: (selected) {
-                        if (selected) {
-                          setState(() => _selectedSport = sport);
-                        }
-                      },
-                    ),
-                  );
-                }).toList(),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              'Venues in Colombo',
-              style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: AppColors.muted,
-                  ),
-            ),
-            const SizedBox(height: 12),
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: _loadVenues(),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: CircularProgressIndicator(),
-                    ),
-                  );
-                }
-                if (snapshot.hasError) {
-                  return Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text('Error loading venues: ${snapshot.error}'),
-                    ),
-                  );
-                }
-                final venues = snapshot.data ?? [];
-                if (venues.isEmpty) {
-                  return const Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(32),
-                      child: Text(
-                        'No venues match the selected filters.',
-                        style: TextStyle(color: AppColors.muted),
-                      ),
-                    ),
-                  );
-                }
-
-                return Column(
-                  children: venues.map((venue) {
-                    final hourlyRate = venue['hourly_rate'] ?? 1500;
-                    final env = venue['environment'] ?? 'Indoor';
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Card(
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(AppRadii.card),
-                          onTap: () => _showVenueDetails(venue),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 48,
-                                  height: 48,
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    venue['sport'] == 'Tennis'
-                                        ? Icons.sports_tennis
-                                        : venue['sport'] == 'Futsal'
-                                            ? Icons.sports_soccer
-                                            : Icons.sports_tennis_rounded,
-                                    color: AppColors.primary,
-                                  ),
-                                ),
-                                const SizedBox(width: 14),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        venue['name'] ?? '',
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w700,
-                                          fontSize: 15,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        '${venue['area']} · $env',
-                                        style: const TextStyle(
-                                          color: AppColors.muted,
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                  children: [
-                                    Text(
-                                      'LKR $hourlyRate',
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    const Text(
-                                      '/ hour',
-                                      style: TextStyle(
-                                        color: AppColors.muted,
-                                        fontSize: 11,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    );
-                  }).toList(),
-                );
-              },
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
+
+  Widget _buildHeader() {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 14, 20, 0),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 23),
+              ),
+              const SizedBox(width: 9),
+              const Text(
+                'SPORTSBOOK',
+                style: TextStyle(color: AppColors.primary, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.6),
+              ),
+              const Text(
+                'Court Dashboard',
+                style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w500),
+              ),
+              const Spacer(),
+              IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none_rounded, color: _muted)),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          Row(
+            children: [
+              const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
+              const SizedBox(width: 6),
+              const Text('COLOMBO 07, CINNAMON GARDENS', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              const SizedBox(width: 4),
+              const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
+              const Spacer(),
+              IconButton(
+                onPressed: () {},
+                style: IconButton.styleFrom(backgroundColor: const Color(0xFFE4E9FF)),
+                icon: const Icon(Icons.search_rounded, color: _ink),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text('Hello, Kasun 👋', style: TextStyle(color: _ink, fontSize: 28, fontWeight: FontWeight.w800, letterSpacing: -0.7)),
+          ),
+          const Align(
+            alignment: Alignment.centerLeft,
+            child: Text("Ready for today's match?", style: TextStyle(color: _muted, fontSize: 15)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBookingCard() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 14, offset: Offset(0, 5))]),
+      child: Column(
+        children: [
+          Row(
+            children: [
+              Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFE6ECFF), borderRadius: BorderRadius.circular(18)), child: const Text('⟳ QUICK RE-BOOK', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700))),
+              const Spacer(),
+              const Text('Played 2 days ago', style: TextStyle(color: _muted, fontSize: 14)),
+            ],
+          ),
+          const SizedBox(height: 15),
+          Row(
+            children: [
+              Container(width: 54, height: 54, decoration: BoxDecoration(color: const Color(0xFFE8EDFF), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 30)),
+              const SizedBox(width: 14),
+              const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('CSA National Arena', style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Court 1 (Indoor Teak Wood)', style: TextStyle(color: _muted, fontSize: 14))]),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
+            decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(14)),
+            child: Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('FAST AVAILABILITY', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Today, 6:00 PM • LKR 2,500', style: TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600))])), _SmallBlueButton(label: 'Re-book', icon: Icons.arrow_forward_rounded, onPressed: () {})]),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCategories() {
+    final categories = [
+      ('Badminton', '14 Venues', Icons.sports_tennis_rounded),
+      ('Tennis', '8 Venues', Icons.sports_tennis_rounded),
+      ('Squash', '5 Venues', Icons.sports_handball_rounded),
+    ];
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [const Text('Categories', style: TextStyle(color: _ink, fontSize: 18, fontWeight: FontWeight.w700)), const Spacer(), const Text('5 SPORTS ACTIVE', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800))]),
+      const SizedBox(height: 13),
+      Row(children: categories.map((category) {
+        final selected = _selectedSport == category.$1;
+        return Expanded(
+          child: Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: GestureDetector(
+              onTap: () => setState(() => _selectedSport = category.$1),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+                decoration: BoxDecoration(
+                  color: selected ? AppColors.primary : Colors.white,
+                  borderRadius: BorderRadius.circular(30),
+                  boxShadow: selected
+                      ? const [BoxShadow(color: Color(0x300066FF), blurRadius: 10, offset: Offset(0, 5))]
+                      : null,
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(category.$3, color: selected ? Colors.white : AppColors.primary, size: 18),
+                    const SizedBox(width: 5),
+                    Flexible(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(category.$1, overflow: TextOverflow.ellipsis, style: TextStyle(color: selected ? Colors.white : _ink, fontSize: 13, fontWeight: FontWeight.w600)),
+                          Text(category.$2, style: TextStyle(color: selected ? Colors.white70 : _muted, fontSize: 11)),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      }).toList()),
+    ]);
+  }
+
+  Widget _buildOffer() {
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x350066FF), blurRadius: 15, offset: Offset(0, 8))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(14)), child: const Text('⚡ WEEKEND SPECIAL', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))), const Spacer(), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: const Text('25% OFF', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)))]),
+        const SizedBox(height: 18),
+        const Text('Weekend Smash Deal ⚡', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        const Text('Flat 25% OFF on morning slots before 10 AM at\nselect arenas.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
+        const SizedBox(height: 15),
+        Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),), const Spacer(), TextButton.icon(onPressed: () {}, icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
+      ]),
+    );
+  }
+
+  Widget _buildNearbyHeader() {
+    return const Row(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Nearby Courts', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), SizedBox(height: 3), Text('Real-time availability in Colombo', style: TextStyle(color: _muted, fontSize: 14))]), Spacer(), Text('▧ Map View', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700))]);
+  }
+
+  Widget _buildVenues() {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _loadVenues(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()));
+        if (snapshot.hasError) return Text('Unable to load courts: ${snapshot.error}', style: const TextStyle(color: _muted));
+        final venues = snapshot.data ?? [];
+        if (venues.isEmpty) return const Text('No courts found for this sport.', style: TextStyle(color: _muted));
+        return Column(children: venues.take(3).toList().asMap().entries.map((entry) => Padding(padding: const EdgeInsets.only(bottom: 16), child: _VenueCard(venue: entry.value, imageUrl: _venueImages[entry.key % _venueImages.length], onBook: () => _bookVenue(entry.value)))).toList());
+      },
+    );
+  }
+
+  Future<void> _bookVenue(Map<String, dynamic> venue) async {
+    final rate = (venue['hourly_rate'] as num?)?.toDouble() ?? 1500;
+    try {
+      await _service.createBooking(venueId: venue['id'] ?? 'ven-01', bookingRef: 'SB-${DateTime.now().millisecondsSinceEpoch}', courtName: '${venue['name']} - Court 1', dateSchedule: DateTime.now().toIso8601String().split('T').first, timeSlot: '06:00 PM - 07:00 PM', totalPaid: rate, qrPin: '8492');
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Court booked successfully!'), backgroundColor: Colors.green));
+    } catch (error) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Booking error: $error')));
+    }
+  }
+}
+
+class _VenueCard extends StatelessWidget {
+  const _VenueCard({required this.venue, required this.imageUrl, required this.onBook});
+
+  final Map<String, dynamic> venue;
+  final String imageUrl;
+  final VoidCallback onBook;
+
+  @override
+  Widget build(BuildContext context) {
+    final rate = venue['hourly_rate'] ?? 1500;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 12, offset: Offset(0, 5))]),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        SizedBox(height: 150, width: double.infinity, child: Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (context, error, stackTrace) => const ColoredBox(color: Color(0xFFDCE7FF), child: Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 48)))),
+        Padding(padding: const EdgeInsets.fromLTRB(16, 14, 14, 15), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Expanded(child: Text(venue['name'] ?? 'Court venue', style: const TextStyle(color: _DashboardScreenState._ink, fontSize: 18, fontWeight: FontWeight.w700))), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: const Color(0xFFE5EAFF), borderRadius: BorderRadius.circular(12)), child: Text(venue['environment'] ?? 'Indoor', style: const TextStyle(color: _DashboardScreenState._muted, fontSize: 11, fontWeight: FontWeight.w600)))]),
+          const SizedBox(height: 4),
+          Text(venue['address'] ?? venue['area'] ?? 'Colombo 07', style: const TextStyle(color: _DashboardScreenState._muted, fontSize: 14)),
+          const SizedBox(height: 16),
+          Row(children: [const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('NEXT AVAILABLE', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('6:00 PM • ', style: TextStyle(color: _DashboardScreenState._ink, fontSize: 15, fontWeight: FontWeight.w700))]), Text('LKR $rate/hr', style: const TextStyle(color: _DashboardScreenState._ink, fontSize: 13, fontWeight: FontWeight.w700)), const Spacer(), _SmallBlueButton(label: 'Book Slot', icon: Icons.arrow_forward_rounded, onPressed: onBook)]),
+        ])),
+      ]),
+    );
+  }
+}
+
+class _SmallBlueButton extends StatelessWidget {
+  const _SmallBlueButton({required this.label, required this.icon, required this.onPressed});
+
+  final String label;
+  final IconData icon;
+  final VoidCallback onPressed;
+
+  @override
+  Widget build(BuildContext context) => FilledButton.icon(onPressed: onPressed, icon: Text(label), label: Icon(icon, size: 18), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, shape: const StadiumBorder(), textStyle: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)));
+}
+
+class _PartnerFooter extends StatelessWidget {
+  const _PartnerFooter();
+
+  @override
+  Widget build(BuildContext context) => const Column(children: [Text('✦  OFFICIAL PARTNER OF COLOMBO SPORTS AUTHORITY', textAlign: TextAlign.center, style: TextStyle(color: AppColors.muted, fontSize: 12, fontWeight: FontWeight.w700, letterSpacing: 0.3)), SizedBox(height: 7), Text('SportsBook version 2.4.0 • Real-time Sync Active', style: TextStyle(color: Color(0xFF9AA0AF), fontSize: 12))]);
 }
