@@ -34,7 +34,7 @@ class SportsBookApp extends StatelessWidget {
   const SportsBookApp({
     super.key,
     this.showSplash = false,
-    this.showOnboarding = true,
+    this.showOnboarding = false,
   });
 
   final bool showSplash;
