@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
+import 'venue_detail_screen.dart';
 
 class SearchResultsScreen extends StatefulWidget {
   const SearchResultsScreen({super.key});
@@ -222,11 +223,15 @@ class _ResultCard extends StatelessWidget {
     final rate = venue['hourly_rate'] ?? 1500;
     final name = venue['name'] ?? 'Badminton Arena';
     final area = venue['area'] ?? 'Colombo 07';
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 12, offset: Offset(0, 5))]),
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(context, MaterialPageRoute(builder: (context) => VenueDetailScreen(venue: venue)));
+      },
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 12, offset: Offset(0, 5))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        ClipRRect(borderRadius: BorderRadius.circular(12), child: SizedBox(height: 145, width: double.infinity, child: Stack(fit: StackFit.expand, children: [Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFDCE7FF), child: Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 48))), const Positioned(top: 10, left: 10, child: _ImageBadge(label: 'TOP PICK')), const Positioned(bottom: 9, left: 9, child: _RatingBadge()), Positioned(top: 9, right: 9, child: Container(width: 33, height: 33, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.favorite_border_rounded, color: _SearchResultsColors.ink, size: 19)))]))),
+        ClipRRect(borderRadius: BorderRadius.circular(12), child: SizedBox(height: 145, width: double.infinity, child: Stack(fit: StackFit.expand, children: [Image.network(imageUrl, fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFDCE7FF), child: Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 48))), Positioned(top: 10, left: 10, child: Row(children: const [_ImageBadge(label: 'TOP PICK', bgColor: AppColors.primary, textColor: Colors.white, icon: Icons.check_circle_rounded), SizedBox(width: 6), _ImageBadge(label: 'INSTANT BOOK')])), const Positioned(bottom: 9, left: 9, child: _RatingBadge()), const Positioned(bottom: 9, right: 9, child: _ImageBadge(label: 'BWF CERTIFIED MAT', bgColor: Color(0xD9FFFFFF), textColor: AppColors.primary)), Positioned(top: 9, right: 9, child: Container(width: 33, height: 33, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.favorite_border_rounded, color: _SearchResultsColors.ink, size: 19)))]))),
         const SizedBox(height: 11),
         Text('$name - Court 1', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _SearchResultsColors.ink, fontSize: 17, fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
@@ -240,7 +245,7 @@ class _ResultCard extends StatelessWidget {
         const SizedBox(height: 12),
         Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('STANDARD RATE', style: TextStyle(color: _SearchResultsColors.muted, fontSize: 9, fontWeight: FontWeight.w700)), Text('LKR $rate', style: const TextStyle(color: _SearchResultsColors.ink, fontSize: 18, fontWeight: FontWeight.w800))])), FilledButton.icon(onPressed: onBook, icon: const Text('Book Slot'), label: const Icon(Icons.arrow_forward_rounded, size: 17), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11), minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, shape: const StadiumBorder(), textStyle: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600)))]),
       ]),
-    );
+    ));
   }
 }
 
@@ -255,12 +260,15 @@ class _SummaryChip extends StatelessWidget {
 }
 
 class _ImageBadge extends StatelessWidget {
-  const _ImageBadge({required this.label});
+  const _ImageBadge({required this.label, this.bgColor = Colors.white, this.textColor = AppColors.primary, this.icon});
 
   final String label;
+  final Color bgColor;
+  final Color textColor;
+  final IconData? icon;
 
   @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: Text(label, style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)));
+  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6), decoration: BoxDecoration(color: bgColor, borderRadius: BorderRadius.circular(14)), child: Row(mainAxisSize: MainAxisSize.min, children: [if (icon != null) ...[Icon(icon, size: 10, color: textColor), const SizedBox(width: 4)], Text(label, style: TextStyle(color: textColor, fontSize: 9, fontWeight: FontWeight.w800))]));
 }
 
 class _RatingBadge extends StatelessWidget {

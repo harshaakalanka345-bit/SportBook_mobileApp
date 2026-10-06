@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../core/app_theme.dart';
+import 'digital_match_pass_screen.dart';
+import 'modify_slot_screen.dart';
+import 'cancel_booking_screen.dart';
 
 class BookingScreen extends StatelessWidget {
   const BookingScreen({super.key});
@@ -69,7 +72,7 @@ class BookingScreen extends StatelessWidget {
         const SizedBox(height: 4),
         SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => _showPass(context, ref), icon: const Icon(Icons.qr_code_2_rounded, size: 20), label: const Text('View Pass & QR Code'), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 13)))),
         const SizedBox(height: 10),
-        Row(children: [Expanded(child: _softButton('▣ Modify Slot', () {})), const SizedBox(width: 8), Expanded(child: _softButton('× Cancel', () {}, danger: true))]),
+        Row(children: [Expanded(child: _softButton('▣ Modify Slot', () { Navigator.push(context, MaterialPageRoute(builder: (context) => const ModifySlotScreen())); })), const SizedBox(width: 8), Expanded(child: _softButton('× Cancel', () { Navigator.push(context, MaterialPageRoute(builder: (context) => const CancelBookingScreen())); }, danger: true))]),
         const SizedBox(height: 10),
         const Center(child: Text('Free cancellation policy was applicable until 4:00\nPM today', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600))),
       ]),
@@ -97,7 +100,12 @@ class BookingScreen extends StatelessWidget {
 
   Widget _softButton(String label, VoidCallback onPressed, {bool danger = false}) => TextButton(onPressed: onPressed, style: TextButton.styleFrom(backgroundColor: softBlue, foregroundColor: danger ? Colors.redAccent : ink, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 11)), child: Text(label));
 
-  void _showPass(BuildContext context, String ref) => showDialog(context: context, builder: (ctx) => AlertDialog(title: const Text('Digital Match Pass'), content: QrImageView(data: 'SPORTSBOOK:$ref:PIN:8492', size: 190), actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close'))]));
+  void _showPass(BuildContext context, String ref) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => DigitalMatchPassScreen(bookingRef: ref)),
+    );
+  }
 }
 
 class _StatusTag extends StatelessWidget {

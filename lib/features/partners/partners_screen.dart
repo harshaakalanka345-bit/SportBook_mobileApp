@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
+import 'create_match_beacon_screen.dart';
 
 class PartnersScreen extends StatefulWidget {
   const PartnersScreen({super.key});
@@ -176,9 +177,10 @@ class _PartnersScreenState extends State<PartnersScreen> {
   void _showMessage(String message) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
 
   void _showCreateBeaconSheet() {
-    String sport = 'Badminton';
-    final venueController = TextEditingController(text: 'Otters AC');
-    showModalBottomSheet(context: context, isScrollControlled: true, builder: (ctx) => StatefulBuilder(builder: (ctx, setModalState) => Padding(padding: EdgeInsets.fromLTRB(20, 22, 20, MediaQuery.of(ctx).viewInsets.bottom + 22), child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [Text('Request a Partner', style: Theme.of(ctx).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w700)), const SizedBox(height: 14), DropdownButtonFormField<String>(initialValue: sport, decoration: const InputDecoration(labelText: 'Sport'), items: const [DropdownMenuItem(value: 'Badminton', child: Text('Badminton')), DropdownMenuItem(value: 'Tennis', child: Text('Tennis'))], onChanged: (value) => setModalState(() => sport = value ?? sport)), const SizedBox(height: 12), TextField(controller: venueController, decoration: const InputDecoration(labelText: 'Venue')), const SizedBox(height: 18), FilledButton(onPressed: () async { Navigator.pop(ctx); try { await _service.createMatchBeacon(sport: sport, skillLevel: 'Intermediate', venueName: venueController.text.trim(), scheduledTime: 'Today 07:00 PM'); if (mounted) _showMessage('Partner request broadcasted!'); } catch (error) { if (mounted) _showMessage('Request error: $error'); } }, child: const Text('Broadcast Match Request'))]))));
+    Navigator.push(
+      context,
+      MaterialPageRoute(builder: (context) => const CreateMatchBeaconScreen()),
+    );
   }
 }
 

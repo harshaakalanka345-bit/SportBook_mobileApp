@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import 'search_results_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -490,7 +491,12 @@ class _SearchScreenState extends State<SearchScreen> {
             ),
           ),
           FilledButton(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (context) => const SearchResultsScreen()),
+              );
+            },
             style: FilledButton.styleFrom(
               minimumSize: const Size(64, 48), // override global infinity width theme
               backgroundColor: AppColors.primary,
