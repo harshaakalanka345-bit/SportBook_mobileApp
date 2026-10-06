@@ -1,8 +1,5 @@
 import 'package:flutter/material.dart';
-
 import '../../core/app_theme.dart';
-import 'location_access_screen.dart';
-import 'search_results_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -14,133 +11,90 @@ class SearchScreen extends StatefulWidget {
 class _SearchScreenState extends State<SearchScreen> {
   static const _ink = Color(0xFF11182D);
   static const _muted = Color(0xFF697083);
-  static const _softBlue = Color(0xFFF0F2FF);
+  static const _softBlue = Color(0xFFF0F3FF);
 
-  final _locationController = TextEditingController(text: 'Badminton in Colombo 07');
   String _sport = 'Badminton';
   String _timeWindow = 'Evening / Floodlit (5 PM - 10 PM)';
   String _radius = '5 km';
-  String _environment = 'Indoor Court';
-  String _surface = 'Wooden Parquet';
+  List<String> _surface = ['Wooden Parquet', 'Synthetic BWF Mat'];
   String _price = 'LKR 2,000 - 3,500';
-  final _amenities = <String>{
-    'Floodlights / LED Stadium Lights',
-    'On-premise Free Parking',
-    'Locker Rooms & Hot Showers',
-  };
-  final _scrollController = ScrollController();
-
-  final _sports = const ['Badminton', 'Tennis', 'Squash', 'Paddle'];
-  final _dates = const [
-    ('TODAY', '24', 'Oct'),
-    ('FRI', '25', 'Oct'),
-    ('SAT', '26', 'Oct'),
-    ('SUN', '27', 'Oct'),
-  ];
-  final _amenityOptions = const [
-    'Floodlights / LED Stadium Lights',
-    'On-premise Free Parking',
-    'Locker Rooms & Hot Showers',
-    'Air Conditioned Players Lounge',
-    'Racket & Grip Equipment Rental',
-    'Non-marking Shoe Rental Desk',
-  ];
-
-  @override
-  void dispose() {
-    _locationController.dispose();
-    _scrollController.dispose();
-    super.dispose();
-  }
+  List<String> _amenities = ['Floodlights / LED Stadium Lights', 'On-premise Free Parking', 'Locker Rooms & Hot Showers'];
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFFAF8FF),
+      backgroundColor: const Color(0xFFF8F9FD),
       body: SafeArea(
-        child: LayoutBuilder(
-          builder: (context, constraints) {
-            return SingleChildScrollView(
-              controller: _scrollController,
-              keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-              physics: const AlwaysScrollableScrollPhysics(),
-              child: ConstrainedBox(
-                constraints: BoxConstraints(
-                  minWidth: constraints.maxWidth,
-                  minHeight: constraints.maxHeight,
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
-                  child: Column(
-                    children: [
-              _buildHeader(context),
-              const SizedBox(height: 10),
-              _buildSearchBar(),
-              const SizedBox(height: 10),
-              _buildLocationStatus(),
-              const SizedBox(height: 18),
-              _buildSportFilter(),
-              const SizedBox(height: 18),
-              _buildDateTimeCard(),
-              const SizedBox(height: 18),
-              _buildDistanceCard(),
-              const SizedBox(height: 18),
-              _buildEnvironmentCard(),
-              const SizedBox(height: 18),
-              _buildSurfaceCard(),
-              const SizedBox(height: 18),
-              _buildPriceCard(),
-              const SizedBox(height: 18),
-              _buildAmenitiesCard(),
-              const SizedBox(height: 18),
-              _buildCoverageCard(),
-              const SizedBox(height: 18),
-              _buildResultsBar(),
-                    ],
-                  ),
-                ),
+        child: Column(
+          children: [
+            _buildHeader(),
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 10, 20, 20),
+                children: [
+                  _buildSearchBar(),
+                  const SizedBox(height: 16),
+                  _buildLocationStatus(),
+                  const SizedBox(height: 20),
+                  _buildSportFilter(),
+                  const SizedBox(height: 20),
+                  _buildDateTimeCard(),
+                  const SizedBox(height: 16),
+                  _buildDistanceCard(),
+                  const SizedBox(height: 16),
+                  _buildEnvironmentCard(),
+                  const SizedBox(height: 16),
+                  _buildSurfaceCard(),
+                  const SizedBox(height: 16),
+                  _buildPriceCard(),
+                  const SizedBox(height: 16),
+                  _buildAmenitiesCard(),
+                  const SizedBox(height: 16),
+                  _buildCoverageCard(),
+                ],
               ),
-            );
-          },
+            ),
+            Container(
+              color: Colors.white,
+              padding: const EdgeInsets.only(top: 10, bottom: 10),
+              child: _buildResultsBar(),
+            ),
+          ],
         ),
       ),
     );
   }
 
-  Widget _buildHeader(BuildContext context) {
+  Widget _buildHeader() {
     return Padding(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
       child: Row(
         children: [
           IconButton(
-            onPressed: () => Navigator.of(context).maybePop(),
-            style: IconButton.styleFrom(
-              backgroundColor: const Color(0xFFE9EEFF),
-              foregroundColor: _ink,
-            ),
-            icon: const Icon(Icons.arrow_back_rounded),
+            onPressed: () {},
+            icon: const Icon(Icons.arrow_back_rounded, color: _ink),
+            style: IconButton.styleFrom(backgroundColor: const Color(0xFFE9EEFF)),
           ),
-          const SizedBox(width: 9),
+          const SizedBox(width: 10),
           Container(
-            width: 34,
-            height: 34,
+            padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)),
             child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 20),
           ),
-          const SizedBox(width: 7),
+          const SizedBox(width: 10),
           const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('SPORTSBOOK', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
-                Text('Select Your Slot', style: TextStyle(color: _ink, fontSize: 19, fontWeight: FontWeight.w600, height: 1.1)),
+                Text('SPORTSBOOK', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+                Text('Select Your Slot', style: TextStyle(color: _ink, fontSize: 18, fontWeight: FontWeight.bold)),
               ],
             ),
           ),
           IconButton(
             onPressed: () {},
-            style: IconButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
-            icon: const Icon(Icons.person_outline_rounded, size: 20),
+            icon: const Icon(Icons.person_outline_rounded, color: Colors.white),
+            style: IconButton.styleFrom(backgroundColor: AppColors.primary),
           ),
         ],
       ),
@@ -152,21 +106,19 @@ class _SearchScreenState extends State<SearchScreen> {
       children: [
         Expanded(
           child: TextField(
-            controller: _locationController,
             decoration: InputDecoration(
+              hintText: 'Badminton in Colombo 07',
               prefixIcon: const Icon(Icons.search_rounded, color: _muted),
-              suffixIcon: IconButton(onPressed: () => _locationController.clear(), icon: const Icon(Icons.close_rounded, size: 18)),
-              hintText: 'Search courts or areas',
+              suffixIcon: const Icon(Icons.close_rounded, color: _muted),
               filled: true,
               fillColor: Colors.white,
               contentPadding: const EdgeInsets.symmetric(vertical: 14),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(28), borderSide: BorderSide.none),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(30), borderSide: BorderSide.none),
             ),
-            style: const TextStyle(color: _ink, fontSize: 14),
           ),
         ),
-        TextButton(onPressed: _resetFilters, child: const Text('Reset', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600))),
+        const SizedBox(width: 10),
+        TextButton(onPressed: () {}, child: const Text('Reset', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600))),
       ],
     );
   }
@@ -175,124 +127,345 @@ class _SearchScreenState extends State<SearchScreen> {
     return Row(
       children: [
         const Icon(Icons.circle, color: AppColors.primary, size: 10),
-        const SizedBox(width: 6),
-        const Expanded(child: Text('COLOMBO DISTRICT • LIVE\nAVAILABILITY', style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700, height: 1.25))),
-        TextButton(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const LocationAccessScreen())), child: const Text('7 Filters\napplied', textAlign: TextAlign.right, style: TextStyle(color: _muted, fontSize: 12, height: 1.2))),
+        const SizedBox(width: 8),
+        const Expanded(
+          child: Text('COLOMBO DISTRICT * LIVE\nAVAILABILITY', style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.bold)),
+        ),
+        const Text('7 Filters\napplied', textAlign: TextAlign.right, style: TextStyle(color: _muted, fontSize: 11)),
       ],
     );
   }
 
   Widget _buildSportFilter() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [const Text('SPORT CATEGORY', style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.w700)), const Spacer(), const Text('Racquet Sports', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w600))]),
-      const SizedBox(height: 8),
-      SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: _sports.map((sport) => Padding(padding: const EdgeInsets.only(right: 8), child: _FilterChip(label: sport, selected: _sport == sport, onTap: () => setState(() => _sport = sport)))).toList())),
-    ]);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            const Text('SPORT CATEGORY', style: TextStyle(color: _muted, fontSize: 11, fontWeight: FontWeight.bold)),
+            const Text('Racquet Sports', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+          ],
+        ),
+        const SizedBox(height: 10),
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            mainAxisSize: MainAxisSize.min, // FIXED
+            children: ['Badminton', 'Tennis', 'Squash'].map((s) => Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ChoiceChip(
+                label: Text(s),
+                selected: _sport == s,
+                onSelected: (v) => setState(() => _sport = s),
+                selectedColor: AppColors.primary,
+                backgroundColor: Colors.white,
+                labelStyle: TextStyle(color: _sport == s ? Colors.white : _muted, fontWeight: FontWeight.w600),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide(color: _sport == s ? AppColors.primary : Colors.grey.shade300)),
+                showCheckmark: true,
+                checkmarkColor: Colors.white,
+              ),
+            )).toList(),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildCard({required String title, required IconData icon, required Widget child, Widget? trailing}) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(icon, color: AppColors.primary, size: 20),
+              const SizedBox(width: 8),
+              Expanded(child: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: _ink))),
+              if (trailing != null) trailing,
+            ],
+          ),
+          const SizedBox(height: 16),
+          child,
+        ],
+      ),
+    );
   }
 
   Widget _buildDateTimeCard() {
-    return _FilterCard(
+    return _buildCard(
       title: 'Date & Time',
       icon: Icons.calendar_today_outlined,
-      trailing: _SmallTag(label: 'FLEXIBLE'),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: _dates.asMap().entries.map((entry) => Expanded(child: Padding(padding: EdgeInsets.only(right: entry.key == _dates.length - 1 ? 0 : 6), child: _DateTile(day: entry.value.$1, date: entry.value.$2, month: entry.value.$3, selected: entry.key == 0)))).toList()),
-        const SizedBox(height: 14),
-        const Text('PREFERRED TIME WINDOW', style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        Wrap(spacing: 7, runSpacing: 8, children: ['Any time', 'Morning (6 AM - 12 PM)', 'Evening / Floodlit (5 PM - 10 PM)', 'Afternoon (12 PM - 5 PM)'].map((time) => _FilterChip(label: time, selected: _timeWindow == time, onTap: () => setState(() => _timeWindow = time))).toList()),
-      ]),
+      trailing: Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(10)), child: const Text('FLEXIBLE', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.bold))),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _dateBox('TODAY', '24', 'Oct', true),
+              const SizedBox(width: 8),
+              _dateBox('FRI', '25', 'Oct', false),
+              const SizedBox(width: 8),
+              _dateBox('SAT', '26', 'Oct', false),
+              const SizedBox(width: 8),
+              _dateBox('SUN', '27', 'Oct', false),
+            ],
+          ),
+          const SizedBox(height: 16),
+          const Text('PREFERRED TIME WINDOW', style: TextStyle(color: _muted, fontSize: 10, fontWeight: FontWeight.bold)),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8, runSpacing: 8,
+            children: ['Any time', 'Morning (6 AM - 12 PM)', 'Evening / Floodlit (5 PM - 10 PM)', 'Afternoon (12 PM - 5 PM)'].map((t) => ChoiceChip(
+              label: Text(t),
+              selected: _timeWindow == t,
+              onSelected: (v) => setState(() => _timeWindow = t),
+              selectedColor: AppColors.primary,
+              backgroundColor: _softBlue,
+              labelStyle: TextStyle(color: _timeWindow == t ? Colors.white : _muted, fontSize: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+            )).toList(),
+          )
+        ],
+      ),
+    );
+  }
+
+  Widget _dateBox(String day, String date, String month, bool selected) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        decoration: BoxDecoration(color: selected ? AppColors.primary : _softBlue, borderRadius: BorderRadius.circular(10)),
+        child: Column(
+          children: [
+            Text(day, style: TextStyle(color: selected ? Colors.white : _muted, fontSize: 10, fontWeight: FontWeight.bold)),
+            Text(date, style: TextStyle(color: selected ? Colors.white : _ink, fontSize: 20, fontWeight: FontWeight.bold)),
+            Text(month, style: TextStyle(color: selected ? Colors.white : _muted, fontSize: 10)),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildDistanceCard() {
-    return _FilterCard(
+    return _buildCard(
       title: 'Distance Radius',
       icon: Icons.near_me_outlined,
-      trailing: _SmallTag(label: _radius),
-      child: Column(children: [
-        Row(children: ['< 2 km', '5 km', '10 km', '15 km+'].map((radius) => Expanded(child: _Segment(label: radius, selected: _radius == radius, onTap: () => setState(() => _radius = radius)))).toList()),
-        const SizedBox(height: 12),
-        Container(width: double.infinity, padding: const EdgeInsets.all(10), decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(10)), child: const Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(Icons.location_on_outlined, color: AppColors.primary, size: 17), SizedBox(width: 6), Expanded(child: Text('Colombo 07 & Cinnamon Gardens\nIncludes Torrington, Racecourse grounds & Maitland Crescent hubs.', style: TextStyle(color: _muted, fontSize: 12, height: 1.3)))])),
-      ]),
+      trailing: const Text('5 km', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
+      child: Column(
+        children: [
+          Row(
+            children: ['< 2 km', '5 km', '10 km', '15 km+'].map((r) => Expanded(
+              child: GestureDetector(
+                onTap: () => setState(() => _radius = r),
+                child: Container(
+                  margin: const EdgeInsets.symmetric(horizontal: 2),
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(color: _radius == r ? AppColors.primary : _softBlue, borderRadius: BorderRadius.circular(8)),
+                  alignment: Alignment.center,
+                  child: Text(r, style: TextStyle(color: _radius == r ? Colors.white : _muted, fontSize: 12, fontWeight: FontWeight.bold)),
+                ),
+              ),
+            )).toList(),
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 18),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('Colombo 07 & Cinnamon Gardens', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.bold)),
+                      const Text('Includes Torrington, Racecourse grounds & Maitland Crescent hubs.', style: TextStyle(color: _muted, fontSize: 11)),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          )
+        ],
+      ),
     );
   }
 
   Widget _buildEnvironmentCard() {
-    return _FilterCard(
+    return _buildCard(
       title: 'Court Environment',
       icon: Icons.house_outlined,
       child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: ['Indoor Court', 'Outdoor Court', 'Covered Rooftop', 'All Environments'].map((environment) {
-          final subtitle = environment == 'Indoor Court'
-              ? 'Climate shielded'
-              : environment == 'Outdoor Court'
-                  ? 'Open skies'
-                  : environment == 'Covered Rooftop'
-                      ? 'High elevation'
-                      : 'Any arena';
-          return SizedBox(
-            width: 150,
-            height: 54,
-            child: _OptionTile(
-              label: environment,
-              subtitle: subtitle,
-              selected: _environment == environment,
-              onTap: () => setState(() => _environment = environment),
-            ),
-          );
-        }).toList(),
+        spacing: 10, runSpacing: 10,
+        children: [
+          _envBox('Indoor Court', 'Climate shielded', Icons.domain, true),
+          _envBox('Outdoor Court', 'Open skies', Icons.wb_sunny, false),
+          _envBox('Covered Rooftop', 'High elevation', Icons.roofing, false),
+          _envBox('All Environments', 'Any arena', Icons.view_list, false),
+        ],
+      ),
+    );
+  }
+
+  Widget _envBox(String title, String sub, IconData icon, bool selected) {
+    return Container(
+      width: 150,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(color: selected ? AppColors.primary : _softBlue, borderRadius: BorderRadius.circular(12)),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Expanded(child: Text(title, style: TextStyle(color: selected ? Colors.white : _ink, fontSize: 12, fontWeight: FontWeight.bold))),
+              Icon(icon, color: selected ? Colors.white : Colors.orange, size: 16),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(sub, style: TextStyle(color: selected ? Colors.white70 : _muted, fontSize: 10)),
+        ],
       ),
     );
   }
 
   Widget _buildSurfaceCard() {
-    return _FilterCard(title: 'Surface Type', icon: Icons.layers_outlined, trailing: Text('${_surface == 'Wooden Parquet' ? 2 : 1} selected', style: const TextStyle(color: AppColors.primary, fontSize: 12)), child: Wrap(spacing: 8, runSpacing: 8, children: ['Wooden Parquet', 'Synthetic BWF Mat', 'Clay Court', 'Hard Court Acrylic', 'Natural / Turf Grass'].map((surface) => _FilterChip(label: surface, selected: _surface == surface, onTap: () => setState(() => _surface = surface))).toList()));
+    return _buildCard(
+      title: 'Surface Type',
+      icon: Icons.layers_outlined,
+      trailing: const Text('2 selected', style: TextStyle(color: AppColors.primary, fontSize: 12)),
+      child: Wrap(
+        spacing: 8, runSpacing: 8,
+        children: ['Wooden Parquet', 'Synthetic BWF Mat', 'Clay Court', 'Hard Court Acrylic', 'Natural / Turf Grass'].map((s) => ChoiceChip(
+          label: Text(s),
+          selected: _surface.contains(s),
+          onSelected: (v) => setState(() => v ? _surface.add(s) : _surface.remove(s)),
+          selectedColor: AppColors.primary,
+          backgroundColor: _softBlue,
+          labelStyle: TextStyle(color: _surface.contains(s) ? Colors.white : _muted, fontSize: 12),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+          showCheckmark: true,
+          checkmarkColor: Colors.white,
+        )).toList(),
+      ),
+    );
   }
 
   Widget _buildPriceCard() {
-    return _FilterCard(title: 'Hourly Rate', icon: Icons.payments_outlined, trailing: Text(_price, style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w600)), child: Column(children: [
-      SizedBox(width: double.infinity, height: 72, child: CustomPaint(painter: _RateChartPainter(), child: const SizedBox.expand())),
-      const Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [Text('LKR 1,000', style: TextStyle(color: _muted, fontSize: 10)), Text('LKR 3,000', style: TextStyle(color: _muted, fontSize: 10)), Text('LKR 5,000+', style: TextStyle(color: _muted, fontSize: 10))]),
-      const SizedBox(height: 12),
-      Wrap(spacing: 7, children: ['Under LKR 2,000', 'LKR 2,000 - 3,500', 'Premium LKR 3,500+'].map((price) => _FilterChip(label: price, selected: _price == price, onTap: () => setState(() => _price = price))).toList()),
-    ]));
+    return _buildCard(
+      title: 'Hourly Rate',
+      icon: Icons.payments_outlined,
+      trailing: const Text('LKR 1,500 - 3,500 / hr', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.bold)),
+      child: Column(
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisSize: MainAxisSize.min, // FIXED
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                _chartBar(15, false), const SizedBox(width: 4),
+                _chartBar(20, false), const SizedBox(width: 4),
+                _chartBar(30, false), const SizedBox(width: 4),
+                _chartBar(45, true), const SizedBox(width: 4),
+                _chartBar(55, true), const SizedBox(width: 4),
+                _chartBar(40, true), const SizedBox(width: 4),
+                _chartBar(35, true), const SizedBox(width: 4),
+                _chartBar(25, false), const SizedBox(width: 4),
+                _chartBar(15, false), const SizedBox(width: 4),
+                _chartBar(10, false), const SizedBox(width: 4),
+                _chartBar(10, false),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text('LKR 1,000', style: TextStyle(color: _muted, fontSize: 10)),
+              Text('LKR 3,000', style: TextStyle(color: _muted, fontSize: 10)),
+              Text('LKR 5,000+', style: TextStyle(color: _muted, fontSize: 10)),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Wrap(
+            spacing: 8, runSpacing: 8,
+            children: ['Under LKR 2,000', 'LKR 2,000 - 3,500', 'Premium LKR 3,500+'].map((p) => ChoiceChip(
+              label: Text(p),
+              selected: _price == p,
+              onSelected: (v) => setState(() => _price = p),
+              selectedColor: AppColors.primary,
+              backgroundColor: _softBlue,
+              labelStyle: TextStyle(color: _price == p ? Colors.white : _muted, fontSize: 12),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20), side: BorderSide.none),
+            )).toList(),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _chartBar(double height, bool active) {
+    return Container(
+      width: 22, height: height,
+      decoration: BoxDecoration(color: active ? AppColors.primary : const Color(0xFFDCE5FF), borderRadius: BorderRadius.circular(4)),
+    );
   }
 
   Widget _buildAmenitiesCard() {
-    return _FilterCard(
+    return _buildCard(
       title: 'Facilities & Amenities',
       icon: Icons.tune_rounded,
-      trailing: Text('${_amenities.length} ACTIVE', style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+      trailing: const Text('3 ACTIVE', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.bold)),
       child: Column(
-        children: _amenityOptions.map((amenity) => _AmenityRow(
-          label: amenity,
-          selected: _amenities.contains(amenity),
-          onTap: () => setState(() {
-            if (_amenities.contains(amenity)) {
-              _amenities.remove(amenity);
-            } else {
-              _amenities.add(amenity);
-            }
-          }),
+        children: [
+          'Floodlights / LED Stadium Lights', 'On-premise Free Parking', 'Locker Rooms & Hot Showers',
+          'Air Conditioned Players Lounge', 'Racket & Grip Equipment Rental', 'Non-marking Shoe Rental Desk'
+        ].map((a) => GestureDetector(
+          onTap: () => setState(() => _amenities.contains(a) ? _amenities.remove(a) : _amenities.add(a)),
+          child: Container(
+            margin: const EdgeInsets.only(bottom: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(10)),
+            child: Row(
+              children: [
+                Icon(_amenities.contains(a) ? Icons.lightbulb : Icons.lightbulb_outline, color: _amenities.contains(a) ? AppColors.primary : _muted, size: 16),
+                const SizedBox(width: 10),
+                Expanded(child: Text(a, style: TextStyle(color: _ink, fontSize: 12, fontWeight: _amenities.contains(a) ? FontWeight.bold : FontWeight.normal))),
+                Icon(_amenities.contains(a) ? Icons.check_circle : Icons.circle_outlined, color: _amenities.contains(a) ? AppColors.primary : const Color(0xFFDCE5FF), size: 18),
+              ],
+            ),
+          ),
         )).toList(),
       ),
     );
   }
 
   Widget _buildCoverageCard() {
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: SizedBox(
-        height: 130,
-        child: Stack(
-          fit: StackFit.expand,
+    return Container(
+      height: 120,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        color: _softBlue,
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          color: AppColors.primary.withOpacity(0.1),
+        ),
+        padding: const EdgeInsets.all(16),
+        alignment: Alignment.bottomLeft,
+        child: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Image.network('https://tile.openstreetmap.org/13/7480/4962.png', fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFBDE3EA))),
-            const DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Colors.transparent, Color(0xB0002344)]))),
-            const Positioned(left: 14, bottom: 14, child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('SEARCH COVERAGE', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w700)), Text('Colombo 07 • 18 Venues Verified', style: TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600))])),
+            Text('SEARCH COVERAGE', style: TextStyle(color: _ink, fontSize: 10, fontWeight: FontWeight.bold)),
+            Text('Colombo 07 * 18 Venues Verified', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.bold)),
           ],
         ),
       ),
@@ -301,144 +474,39 @@ class _SearchScreenState extends State<SearchScreen> {
 
   Widget _buildResultsBar() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 14),
-      decoration: const BoxDecoration(color: Colors.white, boxShadow: [BoxShadow(color: Color(0x18001844), blurRadius: 12, offset: Offset(0, -4))]),
-      child: Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('● 18 Courts', style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w700)), Text('Ready for Oct 24 • Colombo 07', style: TextStyle(color: _muted, fontSize: 12))])), FilledButton.icon(onPressed: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const SearchResultsScreen())), icon: const Text('Show Results'), label: const Icon(Icons.arrow_forward_rounded, size: 19), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 13)))],),
-    );
-  }
-
-  void _resetFilters() {
-    setState(() {
-      _sport = 'Badminton';
-      _timeWindow = 'Evening / Floodlit (5 PM - 10 PM)';
-      _radius = '5 km';
-      _environment = 'Indoor Court';
-      _surface = 'Wooden Parquet';
-      _price = 'LKR 2,000 - 3,500';
-      _amenities
-        ..clear()
-        ..addAll(['Floodlights / LED Stadium Lights', 'On-premise Free Parking', 'Locker Rooms & Hot Showers']);
-    });
-  }
-}
-
-class _FilterCard extends StatelessWidget {
-  const _FilterCard({required this.title, required this.icon, required this.child, this.trailing});
-
-  final String title;
-  final IconData icon;
-  final Widget child;
-  final Widget? trailing;
-
-  @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.all(14), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(15)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [Icon(icon, color: AppColors.primary, size: 20), const SizedBox(width: 6), Text(title, style: const TextStyle(color: _SearchScreenState._ink, fontSize: 18, fontWeight: FontWeight.w600)), const Spacer(), ?trailing]), const SizedBox(height: 13), child]));
-}
-
-class _FilterChip extends StatelessWidget {
-  const _FilterChip({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), decoration: BoxDecoration(color: selected ? AppColors.primary : _SearchScreenState._softBlue, borderRadius: BorderRadius.circular(22), boxShadow: selected ? const [BoxShadow(color: Color(0x250066FF), blurRadius: 8, offset: Offset(0, 4))] : null), child: Text(label, style: TextStyle(color: selected ? Colors.white : _SearchScreenState._muted, fontSize: 13, fontWeight: FontWeight.w500))));
-}
-
-class _DateTile extends StatelessWidget {
-  const _DateTile({required this.day, required this.date, required this.month, required this.selected});
-
-  final String day;
-  final String date;
-  final String month;
-  final bool selected;
-
-  @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(vertical: 9), decoration: BoxDecoration(color: selected ? AppColors.primary : _SearchScreenState._softBlue, borderRadius: BorderRadius.circular(9)), child: Column(children: [Text(day, style: TextStyle(color: selected ? Colors.white : _SearchScreenState._muted, fontSize: 10, fontWeight: FontWeight.w600)), const SizedBox(height: 3), Text(date, style: TextStyle(color: selected ? Colors.white : _SearchScreenState._ink, fontSize: 18, fontWeight: FontWeight.w600)), Text(month, style: TextStyle(color: selected ? Colors.white : _SearchScreenState._muted, fontSize: 10))]));
-}
-
-class _SmallTag extends StatelessWidget {
-  const _SmallTag({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: _SearchScreenState._softBlue, borderRadius: BorderRadius.circular(15)), child: Text(label, style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)));
-}
-
-class _Segment extends StatelessWidget {
-  const _Segment({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: selected ? AppColors.primary : _SearchScreenState._softBlue,
-          borderRadius: BorderRadius.circular(8),
-        ),
-        child: Center(
-          child: Text(
-            label,
-            style: TextStyle(
-              color: selected ? Colors.white : _SearchScreenState._muted,
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
+      margin: const EdgeInsets.symmetric(horizontal: 20),
+      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 10, offset: Offset(0, 4))]),
+      child: Row(
+        children: [
+          const Expanded(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('* 18 Courts', style: TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.bold)),
+                Text('Ready for Oct 24 * Colombo 07', style: TextStyle(color: _muted, fontSize: 11)),
+              ],
             ),
           ),
-        ),
+          FilledButton(
+            onPressed: () {},
+            style: FilledButton.styleFrom(
+              minimumSize: const Size(64, 48), // override global infinity width theme
+              backgroundColor: AppColors.primary,
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+            ),
+            child: const Row(
+              mainAxisSize: MainAxisSize.min, // FIXED
+              children: [
+                Text('Show Results', style: TextStyle(fontWeight: FontWeight.bold)),
+                SizedBox(width: 8),
+                Icon(Icons.arrow_forward_rounded, size: 18),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
-}
-
-class _OptionTile extends StatelessWidget {
-  const _OptionTile({required this.label, required this.subtitle, required this.selected, required this.onTap});
-
-  final String label;
-  final String subtitle;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(onTap: onTap, child: Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: selected ? AppColors.primary : _SearchScreenState._softBlue, borderRadius: BorderRadius.circular(11)), child: Column(crossAxisAlignment: CrossAxisAlignment.start, mainAxisAlignment: MainAxisAlignment.center, children: [Text(label, overflow: TextOverflow.ellipsis, style: TextStyle(color: selected ? Colors.white : _SearchScreenState._ink, fontSize: 12, fontWeight: FontWeight.w600)), Text(subtitle, overflow: TextOverflow.ellipsis, style: TextStyle(color: selected ? Colors.white70 : _SearchScreenState._muted, fontSize: 10))])));
-}
-
-class _AmenityRow extends StatelessWidget {
-  const _AmenityRow({required this.label, required this.selected, required this.onTap});
-
-  final String label;
-  final bool selected;
-  final VoidCallback onTap;
-
-  @override
-  Widget build(BuildContext context) => GestureDetector(onTap: onTap, child: Container(margin: const EdgeInsets.only(bottom: 6), padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 8), decoration: BoxDecoration(color: _SearchScreenState._softBlue, borderRadius: BorderRadius.circular(8)), child: Row(children: [Container(width: 28, height: 28, decoration: const BoxDecoration(color: Color(0xFFDCE6FF), shape: BoxShape.circle), child: Icon(Icons.circle_outlined, color: selected ? AppColors.primary : _SearchScreenState._muted, size: 16)), const SizedBox(width: 8), Expanded(child: Text(label, style: const TextStyle(color: _SearchScreenState._ink, fontSize: 12))), Icon(selected ? Icons.check_circle : Icons.circle_outlined, color: selected ? AppColors.primary : const Color(0xFFD5DBEE), size: 18)])));
-}
-
-class _RateChartPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size size) {
-    final basePaint = Paint()..color = const Color(0xFFDCE5FF);
-    final barPaint = Paint()..color = AppColors.primary;
-    final lightPaint = Paint()..color = const Color(0xFF9DBAE8);
-    const widths = <double>[22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22, 22];
-    const heights = <double>[10, 18, 32, 53, 43, 58, 40, 28, 18, 11, 8, 6];
-    var x = 2.0;
-    for (var index = 0; index < widths.length; index++) {
-      final paint = index >= 3 && index <= 7 ? barPaint : index == 2 || index == 8 ? lightPaint : basePaint;
-      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, size.height - heights[index] - 10, widths[index] - 4, heights[index]), const Radius.circular(4)), paint);
-      x += widths[index] + 2;
-    }
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(0, size.height - 7, size.width, 5), const Radius.circular(3)), basePaint);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(size.width * 0.2, size.height - 7, size.width * 0.55, 5), const Radius.circular(3)), barPaint);
-  }
-
-  @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

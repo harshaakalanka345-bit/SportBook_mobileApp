@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/main_wrapper.dart';
 import '../../core/supabase_service.dart';
 import 'auth_screen.dart';
 
@@ -52,11 +53,24 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
           backgroundColor: Colors.green,
         ),
       );
-      Navigator.of(context).pop(true);
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainWrapper()),
+        (route) => false,
+      );
     } catch (error) {
       if (mounted) {
-        final message = error is AuthException ? error.message : error.toString();
-        _showMessage('Registration error: $message');
+        final message = error.toString();
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Registration error: \$message\\n(Entering Demo Mode automatically)'),
+            backgroundColor: Colors.amber,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainWrapper()),
+          (route) => false,
+        );
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -98,7 +112,10 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   ),
                   const Spacer(),
                   TextButton.icon(
-                    onPressed: () => Navigator.of(context).pop(),
+                    onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const MainWrapper()),
+                      (route) => false,
+                    ),
                     icon: const Text('Skip'),
                     label: const Icon(Icons.arrow_forward_rounded),
                     style: TextButton.styleFrom(

@@ -314,8 +314,10 @@ class _SquadHero extends StatelessWidget {
                         ],
                       ),
                     ),
-                    const Expanded(
+                    const Padding(
+                      padding: EdgeInsets.symmetric(horizontal: 12),
                       child: Column(
+                        mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(

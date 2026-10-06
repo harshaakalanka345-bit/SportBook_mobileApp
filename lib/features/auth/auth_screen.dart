@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/main_wrapper.dart';
 import '../../core/supabase_service.dart';
 import 'registration_screen.dart';
 
@@ -62,14 +63,25 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
         );
       }
-      if (mounted) Navigator.pop(context, true);
+      if (mounted) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const MainWrapper()),
+          (route) => false,
+        );
+      }
     } catch (e) {
       if (!mounted) return;
+      final msg = e.toString();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Auth error: $e'),
-          backgroundColor: Colors.redAccent,
+          content: Text('Auth error: \$msg\\n(Entering Demo Mode automatically)'),
+          backgroundColor: Colors.amber,
+          duration: const Duration(seconds: 4),
         ),
+      );
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainWrapper()),
+        (route) => false,
       );
     } finally {
       if (mounted) setState(() => _isLoading = false);
@@ -96,7 +108,10 @@ class _AuthScreenState extends State<AuthScreen> {
               Align(
                 alignment: Alignment.centerRight,
                 child: TextButton.icon(
-                  onPressed: () => Navigator.of(context).pop(),
+                  onPressed: () => Navigator.of(context).pushAndRemoveUntil(
+                    MaterialPageRoute(builder: (_) => const MainWrapper()),
+                    (route) => false,
+                  ),
                   icon: const Text('Skip'),
                   label: const Icon(Icons.arrow_forward_rounded),
                   style: TextButton.styleFrom(

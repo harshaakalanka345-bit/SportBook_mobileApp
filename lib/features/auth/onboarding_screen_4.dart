@@ -38,7 +38,14 @@ class OnboardingScreen4 extends StatelessWidget {
                           icon: const Icon(Icons.arrow_back_rounded, size: 34),
                         ),
                         const SizedBox(width: 10),
-                        const Expanded(child: Center(child: _AccessStepBadge())),
+                        const Expanded(
+                          child: Center(
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: _AccessStepBadge(),
+                            ),
+                          ),
+                        ),
                         const SizedBox(width: 10),
                         TextButton(
                           onPressed: () => _openApp(context),
@@ -54,7 +61,8 @@ class OnboardingScreen4 extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 32),
-                    const SizedBox(height: 52),
+                    const _AccessHero(),
+                    const SizedBox(height: 40),
                     const Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
@@ -312,19 +320,13 @@ class _AccessHero extends StatelessWidget {
                         color: _Onboarding4Colors.pill,
                         borderRadius: BorderRadius.circular(24),
                       ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.check_circle_outline, color: AppColors.primary, size: 20),
-                          SizedBox(width: 5),
-                          Text(
-                            'Scan & Play',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
+                      child: const Text(
+                        'Scan',
+                        style: TextStyle(
+                          color: AppColors.primary,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                        ),
                       ),
                     ),
                   ],

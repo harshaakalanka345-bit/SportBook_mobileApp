@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../features/auth/profile_screen.dart';
 import '../features/booking/booking_screen.dart';
 import '../features/discovery/dashboard_screen.dart';
 import '../features/discovery/search_screen.dart';
 import '../features/partners/partners_screen.dart';
 import 'app_theme.dart';
+import '../features/auth/profile_screen.dart';
 
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});

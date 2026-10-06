@@ -80,15 +80,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 23),
               ),
               const SizedBox(width: 9),
-              const Text(
-                'SPORTSBOOK',
-                style: TextStyle(color: AppColors.primary, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.6),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'SPORTSBOOK',
+                      style: TextStyle(color: AppColors.primary, fontSize: 15, fontWeight: FontWeight.w800, letterSpacing: 0.6),
+                    ),
+                    Text(
+                      'Court Dashboard',
+                      style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w500),
+                    ),
+                  ],
+                ),
               ),
-              const Text(
-                'Court Dashboard',
-                style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w500),
-              ),
-              const Spacer(),
               IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none_rounded, color: _muted)),
               Container(
                 width: 38,
@@ -103,10 +109,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
               const SizedBox(width: 6),
-              const Text('COLOMBO 07, CINNAMON GARDENS', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              const Expanded(
+                child: Text('COLOMBO 07, CINNAMON GARDENS', overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              ),
               const SizedBox(width: 4),
               const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
-              const Spacer(),
               IconButton(
                 onPressed: () {},
                 style: IconButton.styleFrom(backgroundColor: const Color(0xFFE4E9FF)),
@@ -136,8 +143,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFE6ECFF), borderRadius: BorderRadius.circular(18)), child: const Text('⟳ QUICK RE-BOOK', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700))),
-              const Spacer(),
+              Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFE6ECFF), borderRadius: BorderRadius.circular(18)), child: const Text('⟳ QUICK RE-BOOK', overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)))),
+              const SizedBox(width: 8),
               const Text('Played 2 days ago', style: TextStyle(color: _muted, fontSize: 14)),
             ],
           ),
@@ -146,7 +153,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             children: [
               Container(width: 54, height: 54, decoration: BoxDecoration(color: const Color(0xFFE8EDFF), borderRadius: BorderRadius.circular(14)), child: const Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 30)),
               const SizedBox(width: 14),
-              const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('CSA National Arena', style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Court 1 (Indoor Teak Wood)', style: TextStyle(color: _muted, fontSize: 14))]),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('CSA National Arena', overflow: TextOverflow.ellipsis, style: TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w700)),
+                    SizedBox(height: 4),
+                    Text('Court 1 (Indoor Teak Wood)', overflow: TextOverflow.ellipsis, style: TextStyle(color: _muted, fontSize: 14)),
+                  ],
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 14),
@@ -167,7 +183,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       ('Squash', '5 Venues', Icons.sports_handball_rounded),
     ];
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [const Text('Categories', style: TextStyle(color: _ink, fontSize: 18, fontWeight: FontWeight.w700)), const Spacer(), const Text('5 SPORTS ACTIVE', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800))]),
+      Row(children: [const Expanded(child: Text('Categories', style: TextStyle(color: _ink, fontSize: 18, fontWeight: FontWeight.w700))), const Text('5 SPORTS ACTIVE', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800))]),
       const SizedBox(height: 13),
       Row(children: categories.map((category) {
         final selected = _selectedSport == category.$1;
@@ -214,19 +230,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
       padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x350066FF), blurRadius: 15, offset: Offset(0, 8))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(14)), child: const Text('⚡ WEEKEND SPECIAL', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700))), const Spacer(), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: const Text('25% OFF', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)))]),
+        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(14)), child: const Text('⚡ WEEKEND SPECIAL', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)))), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)), child: const Text('25% OFF', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)))]),
         const SizedBox(height: 18),
         const Text('Weekend Smash Deal ⚡', style: TextStyle(color: Colors.white, fontSize: 21, fontWeight: FontWeight.w700)),
         const SizedBox(height: 6),
         const Text('Flat 25% OFF on morning slots before 10 AM at\nselect arenas.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
         const SizedBox(height: 15),
-        Row(children: [Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),), const Spacer(), TextButton.icon(onPressed: () {}, icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
+        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),)), const SizedBox(width: 8), TextButton.icon(onPressed: () {}, icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
       ]),
     );
   }
 
   Widget _buildNearbyHeader() {
-    return const Row(children: [Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Nearby Courts', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), SizedBox(height: 3), Text('Real-time availability in Colombo', style: TextStyle(color: _muted, fontSize: 14))]), Spacer(), Text('▧ Map View', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700))]);
+    return const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Nearby Courts', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), SizedBox(height: 3), Text('Real-time availability in Colombo', style: TextStyle(color: _muted, fontSize: 14))])), Text('▧ Map View', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700))]);
   }
 
   Widget _buildVenues() {
@@ -273,7 +289,7 @@ class _VenueCard extends StatelessWidget {
           const SizedBox(height: 4),
           Text(venue['address'] ?? venue['area'] ?? 'Colombo 07', style: const TextStyle(color: _DashboardScreenState._muted, fontSize: 14)),
           const SizedBox(height: 16),
-          Row(children: [const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('NEXT AVAILABLE', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('6:00 PM • ', style: TextStyle(color: _DashboardScreenState._ink, fontSize: 15, fontWeight: FontWeight.w700))]), Text('LKR $rate/hr', style: const TextStyle(color: _DashboardScreenState._ink, fontSize: 13, fontWeight: FontWeight.w700)), const Spacer(), _SmallBlueButton(label: 'Book Slot', icon: Icons.arrow_forward_rounded, onPressed: onBook)]),
+          Row(children: [const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('NEXT AVAILABLE', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('6:00 PM • ', style: TextStyle(color: _DashboardScreenState._ink, fontSize: 15, fontWeight: FontWeight.w700))]), Expanded(child: Text('LKR $rate/hr', style: const TextStyle(color: _DashboardScreenState._ink, fontSize: 13, fontWeight: FontWeight.w700))), _SmallBlueButton(label: 'Book Slot', icon: Icons.arrow_forward_rounded, onPressed: onBook)]),
         ])),
       ]),
     );

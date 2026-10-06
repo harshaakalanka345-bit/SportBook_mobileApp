@@ -35,7 +35,7 @@ class BookingScreen extends StatelessWidget {
               const SizedBox(height: 16),
               _bookingCard(context, name: 'Liberty Courts', detail: 'Court 3 • Kollupitiya, Colombo 03', date: 'Saturday, 26 Oct 2024', time: '08:30 AM - 10:00 AM', price: '2,700', status: 'Scheduled', ref: '#SB-COL-2024-9102'),
               const SizedBox(height: 16),
-              Row(children: [const Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700)), const Spacer(), TextButton(onPressed: () {}, child: const Text('View History (5)'))]),
+              Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () {}, child: const Text('View History (5)'))]),
               _completedCard(),
               const SizedBox(height: 18),
               _supportCard(context),
@@ -59,7 +59,7 @@ class BookingScreen extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(17, 17, 17, 14),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17), border: primary ? const Border(top: BorderSide(color: AppColors.primary, width: 7)) : null, boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 10, offset: Offset(0, 5))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [_status(status), const Spacer(), Text(ref, style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700))]),
+        Row(children: [Expanded(child: Align(alignment: Alignment.centerLeft, child: _status(status))), Text(ref, style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700))]),
         const SizedBox(height: 15),
         Row(children: [Container(width: 56, height: 56, decoration: BoxDecoration(color: const Color(0xFFE2EAFF), borderRadius: BorderRadius.circular(15)), child: const Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 30)), const SizedBox(width: 13), Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [const Text('BADMINTON • Indoor Wood Court', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)), const SizedBox(height: 5), Text(name, style: const TextStyle(color: ink, fontSize: 20, fontWeight: FontWeight.w700)), Text(detail, style: const TextStyle(color: muted, fontSize: 13))]))]),
         const SizedBox(height: 16),
@@ -91,7 +91,7 @@ class BookingScreen extends StatelessWidget {
     );
   }
 
-  Widget _supportCard(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(17)), child: Row(children: [Container(width: 42, height: 42, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.support_agent_rounded, color: Colors.white)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Need assistance with\naccess?', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)), Text('24/7 Colombo Sports Authority Hotline', style: TextStyle(color: muted, fontSize: 13))])), FilledButton(onPressed: () {}, style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder()), child: const Text('Call'))]));
+  Widget _supportCard(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(17)), child: Row(children: [Container(width: 42, height: 42, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.support_agent_rounded, color: Colors.white)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Need assistance with\naccess?', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)), Text('24/7 Colombo Sports Authority Hotline', style: TextStyle(color: muted, fontSize: 13))])), FilledButton(onPressed: () {}, style: FilledButton.styleFrom(minimumSize: const Size(64, 36), backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder()), child: const Text('Call'))]));
 
   Widget _status(String label) => Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(20)), child: Text(label, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)));
 
