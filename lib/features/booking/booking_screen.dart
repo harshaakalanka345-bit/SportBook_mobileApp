@@ -7,6 +7,7 @@ import 'modify_slot_screen.dart';
 import 'cancel_booking_screen.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
+import '../../core/supabase_service.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
@@ -16,6 +17,22 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   String _activeTab = 'Upcoming';
+
+  final SupabaseService _service = SupabaseService();
+  late Future<List<Map<String, dynamic>>> _bookingsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadBookings();
+  }
+
+  void _loadBookings() {
+    setState(() {
+      _bookingsFuture = _service.getUserBookings();
+    });
+  }
+
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -40,14 +57,7 @@ class _BookingScreenState extends State<BookingScreen> {
               const SizedBox(height: 16),
               TextField(decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, color: muted), hintText: 'Search bookings or venues...', suffixIcon: IconButton(onPressed: () {}, icon: const Icon(Icons.tune_rounded, color: AppColors.primary)), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none))),
               const SizedBox(height: 13),
-              _tabs(),
-              const SizedBox(height: 18),
-              _bookingCard(context, primary: true, name: 'CSA National Arena', detail: 'Court 1 (Teak Flooring • Olympic Grade)', date: 'Today, 24 Oct 2024', time: '06:00 PM - 08:00 PM', price: '5,825', status: 'Confirmed • In 2 Hours', ref: '#SB-COL-2024-8941'),
-              const SizedBox(height: 16),
-              _bookingCard(context, name: 'Liberty Courts', detail: 'Court 3 • Kollupitiya, Colombo 03', date: 'Saturday, 26 Oct 2024', time: '08:30 AM - 10:00 AM', price: '2,700', status: 'Scheduled', ref: '#SB-COL-2024-9102'),
-              const SizedBox(height: 16),
-              Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () {}, child: const Text('View History (5)'))]),
-              _completedCard(context),
+              _buildFutureBookings(context),
               const SizedBox(height: 18),
               _supportCard(context),
               const SizedBox(height: 26),
@@ -63,7 +73,87 @@ class _BookingScreenState extends State<BookingScreen> {
 
   Widget _badge(String text) => Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(24)), child: Row(children: [const Icon(Icons.circle, color: AppColors.primary, size: 9), const SizedBox(width: 7), Text(text, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1))]));
 
-  Widget _tabs() => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: ['Upcoming', 'Completed', 'Cancelled'].map((tab) => Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(onTap: () { setState((){ _activeTab = tab; }); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11), decoration: BoxDecoration(color: tab == _activeTab ? AppColors.primary : Colors.white, borderRadius: BorderRadius.circular(24)), child: Text('$tab   ${tab == 'Upcoming' ? '2' : tab == 'Completed' ? '5' : '0'}', style: TextStyle(color: tab == _activeTab ? Colors.white : muted, fontSize: 14, fontWeight: FontWeight.w600)))))).toList()));
+  
+  Widget _buildFutureBookings(BuildContext context) {
+    return FutureBuilder<List<Map<String, dynamic>>>(
+      future: _bookingsFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
+        }
+        
+        final bookings = snapshot.data ?? [];
+        
+        final upcomingList = bookings.where((b) => b['status'] != 'Cancelled' && b['status'] != 'Completed').toList();
+        final completedList = bookings.where((b) => b['status'] == 'Completed').toList();
+        final cancelledList = bookings.where((b) => b['status'] == 'Cancelled').toList();
+        
+        List<Map<String, dynamic>> activeList;
+        if (_activeTab == 'Upcoming') activeList = upcomingList;
+        else if (_activeTab == 'Completed') activeList = completedList;
+        else activeList = cancelledList;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _tabs(upcomingList.length, completedList.length, cancelledList.length),
+            const SizedBox(height: 18),
+            if (activeList.isEmpty)
+              const Padding(
+                padding: EdgeInsets.all(16.0),
+                child: Text('No bookings found for this category.', style: TextStyle(color: muted, fontSize: 14)),
+              )
+            else
+              ...activeList.map((b) {
+                final venue = b['venues'] ?? {};
+                final dateSplit = (b['date_schedule'] ?? '').toString().split('-');
+                final formattedDate = dateSplit.length == 3 ? '${dateSplit[2]} Oct ${dateSplit[0]}' : b['date_schedule']; 
+                return Padding(
+                  padding: const EdgeInsets.only(bottom: 16.0),
+                  child: _bookingCard(
+                    context,
+                    primary: activeList.indexOf(b) == 0,
+                    name: venue['name'] ?? 'Unknown Venue',
+                    detail: b['court_name'] ?? 'Court',
+                    date: formattedDate ?? '',
+                    time: b['time_slot'] ?? '',
+                    price: (b['total_paid'] ?? 0).toString(),
+                    status: b['status'] ?? 'Scheduled',
+                    ref: b['booking_ref'] ?? '',
+                  ),
+                );
+              }).toList(),
+              
+            if (_activeTab == 'Upcoming' && completedList.isNotEmpty) ...[
+              const SizedBox(height: 16),
+              Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () {}, child: Text('View History (${completedList.length})'))]),
+              _completedCard(context),
+            ]
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _tabs(int upcoming, int completed, int cancelled) => SingleChildScrollView(
+    scrollDirection: Axis.horizontal, 
+    child: Row(
+      children: ['Upcoming', 'Completed', 'Cancelled'].map((tab) => Padding(
+        padding: const EdgeInsets.only(right: 8), 
+        child: GestureDetector(
+          onTap: () { setState((){ _activeTab = tab; }); }, 
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11), 
+            decoration: BoxDecoration(color: tab == _activeTab ? AppColors.primary : Colors.white, borderRadius: BorderRadius.circular(24)), 
+            child: Text('$tab   ${tab == 'Upcoming' ? upcoming : tab == 'Completed' ? completed : cancelled}', style: TextStyle(color: tab == _activeTab ? Colors.white : muted, fontSize: 14, fontWeight: FontWeight.w600))
+          )
+        )
+      )).toList()
+    )
+  );
 
   Widget _bookingCard(BuildContext context, {required String name, required String detail, required String date, required String time, required String price, required String status, required String ref, bool primary = false}) {
     return Container(

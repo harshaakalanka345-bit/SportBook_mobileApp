@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
+import '../auth/profile_screen.dart';
 import 'venue_detail_screen.dart';
 
 class SearchResultsScreen extends StatefulWidget {
@@ -127,7 +128,7 @@ class _SearchResultsScreenState extends State<SearchResultsScreen> {
             ),
           ),
           IconButton(
-            onPressed: () {},
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
             style: IconButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white),
             icon: const Icon(Icons.person_outline_rounded, size: 20),
           ),

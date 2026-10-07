@@ -165,4 +165,50 @@ class SupabaseService {
         .select()
         .order('created_at', ascending: false);
   }
+
+  // ==========================================
+  // MEMBER 5: ADMIN CRUD (ARENAS & COURTS)
+  // ==========================================
+
+  // Get Admin Venue (Arena Details)
+  Future<Map<String, dynamic>?> getAdminVenue(String venueId) async {
+    return await _client.from('venues').select().eq('id', venueId).maybeSingle();
+  }
+
+  // Update Admin Venue (Arena Details)
+  Future<void> updateAdminVenue(String venueId, Map<String, dynamic> data) async {
+    await _client.from('venues').update(data).eq('id', venueId);
+  }
+
+  // Get Courts for Venue
+  Future<List<Map<String, dynamic>>> getVenueCourts(String venueId) async {
+    return await _client.from('courts').select().eq('venue_id', venueId).order('created_at', ascending: true);
+  }
+
+  // Add Court
+  Future<void> addCourt(String venueId, String name, String type) async {
+    await _client.from('courts').insert({
+      'venue_id': venueId,
+      'name': name,
+      'type': type,
+    });
+  }
+
+  // Update Court
+  Future<void> updateCourt(String courtId, String name, String type) async {
+    await _client.from('courts').update({
+      'name': name,
+      'type': type,
+    }).eq('id', courtId);
+  }
+
+  // Delete Court
+  Future<void> deleteCourt(String courtId) async {
+    await _client.from('courts').delete().eq('id', courtId);
+  }
+  // Reset Password
+  Future<void> resetPassword(String email) async {
+    await _client.auth.resetPasswordForEmail(email);
+  }
+
 }

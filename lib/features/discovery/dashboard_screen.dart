@@ -4,6 +4,8 @@ import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
+import 'venue_detail_screen.dart';
+import 'search_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -123,7 +125,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const SizedBox(width: 4),
               const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
               IconButton(
-                onPressed: () {},
+                onPressed: () {
+                  final nav = Navigator.of(context);
+                  nav.popUntil((route) => route.isFirst);
+                  // Optionally, you might want to switch tabs instead of pushing a new screen if it's a bottom nav bar.
+                  // Wait, how is Search navigated to? Let's just push it for now if it's not available.
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen()));
+                },
                 style: IconButton.styleFrom(backgroundColor: const Color(0xFFE4E9FF)),
                 icon: const Icon(Icons.search_rounded, color: _ink),
               ),
@@ -177,7 +185,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
             decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(14)),
-            child: Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('FAST AVAILABILITY', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Today, 6:00 PM • LKR 2,500', style: TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600))])), _SmallBlueButton(label: 'Re-book', icon: Icons.arrow_forward_rounded, onPressed: () {})]),
+            child: Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('FAST AVAILABILITY', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Today, 6:00 PM • LKR 2,500', style: TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600))])), _SmallBlueButton(label: 'Re-book', icon: Icons.arrow_forward_rounded, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VenueDetailScreen(venue: {'name': 'CSA National Arena'}))))]),
           ),
         ],
       ),
@@ -244,7 +252,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 6),
         const Text('Flat 25% OFF on morning slots before 10 AM at\nselect arenas.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
         const SizedBox(height: 15),
-        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),)), const SizedBox(width: 8), TextButton.icon(onPressed: () {}, icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
+        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),)), const SizedBox(width: 8), TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VenueDetailScreen(venue: {'name': 'CSA National Arena'}))), icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
       ]),
     );
   }

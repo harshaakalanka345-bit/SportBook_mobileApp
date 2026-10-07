@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/app_theme.dart';
+import '../../core/supabase_service.dart';
 
 class AdminProfileScreen extends StatefulWidget {
   const AdminProfileScreen({super.key});
@@ -10,16 +11,45 @@ class AdminProfileScreen extends StatefulWidget {
 }
 
 class _AdminProfileScreenState extends State<AdminProfileScreen> {
+  final SupabaseService _service = SupabaseService();
+  bool _isLoading = true;
+
   // Arena State
-  String _arenaName = 'Colombo Sports Authority Arena';
-  String _arenaBio = 'Premium indoor sports facility with state-of-the-art courts.';
-  String _arenaLocation = 'Colombo 07, Sri Lanka';
+  String _arenaName = '';
+  String _arenaBio = '';
+  String _arenaLocation = '';
+  final String _venueId = 'ven-01'; // Default admin venue
 
   // Courts State
-  List<Map<String, String>> _courts = [
-    {'id': '1', 'name': 'Court 1', 'type': 'Premium Teak Parquet Floor'},
-    {'id': '2', 'name': 'Court 2', 'type': 'Synthetic Indoor Shoe Rubber'},
-  ];
+  List<Map<String, dynamic>> _courts = [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    setState(() => _isLoading = true);
+    try {
+      final venue = await _service.getAdminVenue(_venueId);
+      final courts = await _service.getVenueCourts(_venueId);
+      
+      if (venue != null && mounted) {
+        setState(() {
+          _arenaName = venue['name'] ?? '';
+          _arenaLocation = venue['address'] ?? '';
+          // we use 'area' or 'sport' as bio for now if bio isn't in db schema, let's just use environment or area
+          _arenaBio = 'Premium ${venue['environment']} ${venue['sport']} facility.';
+          _courts = courts;
+        });
+      }
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -30,7 +60,7 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8F9FD),
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: _isLoading ? const Center(child: CircularProgressIndicator()) : SingleChildScrollView(
           padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -324,13 +354,23 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () {
-                setState(() {
-                  _arenaName = nameController.text;
-                  _arenaLocation = locationController.text;
-                  _arenaBio = bioController.text;
-                });
-                Navigator.pop(context);
+              onPressed: () async {
+                final newName = nameController.text;
+                final newLocation = locationController.text;
+                try {
+                  await _service.updateAdminVenue(_venueId, {
+                    'name': newName,
+                    'address': newLocation,
+                  });
+                  setState(() {
+                    _arenaName = newName;
+                    _arenaLocation = newLocation;
+                    _arenaBio = bioController.text;
+                  });
+                  if (context.mounted) Navigator.pop(context);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               },
               child: const Text('Save'),
             ),
@@ -362,24 +402,19 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
           actions: [
             TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
             FilledButton(
-              onPressed: () {
+              onPressed: () async {
                 if (nameController.text.trim().isEmpty) return;
-                setState(() {
+                try {
                   if (isEditing) {
-                    _courts[index] = {
-                      'id': _courts[index]['id']!,
-                      'name': nameController.text,
-                      'type': typeController.text,
-                    };
+                    await _service.updateCourt(_courts[index]['id'], nameController.text, typeController.text);
                   } else {
-                    _courts.add({
-                      'id': DateTime.now().millisecondsSinceEpoch.toString(),
-                      'name': nameController.text,
-                      'type': typeController.text,
-                    });
+                    await _service.addCourt(_venueId, nameController.text, typeController.text);
                   }
-                });
-                Navigator.pop(context);
+                  await _loadData();
+                  if (context.mounted) Navigator.pop(context);
+                } catch (e) {
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+                }
               },
               child: Text(isEditing ? 'Update' : 'Add'),
             ),
@@ -399,9 +434,14 @@ class _AdminProfileScreenState extends State<AdminProfileScreen> {
         actions: [
           TextButton(onPressed: () => Navigator.pop(context), child: const Text('Cancel')),
           TextButton(
-            onPressed: () {
-              setState(() => _courts.removeAt(index));
-              Navigator.pop(context);
+            onPressed: () async {
+              try {
+                await _service.deleteCourt(_courts[index]['id']);
+                await _loadData();
+                if (context.mounted) Navigator.pop(context);
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
             },
             child: const Text('Delete', style: TextStyle(color: Colors.redAccent)),
           ),

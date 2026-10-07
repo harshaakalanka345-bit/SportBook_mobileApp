@@ -176,3 +176,33 @@ VALUES
     ('Badminton', 'Intermediate', 'Royal Indoor Badminton', 'Tomorrow 06:00 PM'),
     ('Badminton', 'Beginner', 'Torrington Racquet Hub', 'Saturday 04:00 PM'),
     ('Tennis', 'Advanced', 'CR & FC Outdoor Courts', 'Sunday 07:00 AM');
+-- ------------------------------------------------------------------------------
+-- 5. COURTS TABLE (Admin CRUD)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.courts (
+    id TEXT PRIMARY KEY DEFAULT ('crt-' || substr(md5(random()::text), 1, 8)),
+    venue_id TEXT REFERENCES public.venues(id) ON DELETE CASCADE,
+    name TEXT NOT NULL,
+    type TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.courts ENABLE ROW LEVEL SECURITY;
+
+DROP POLICY IF EXISTS "Allow public read access to courts" ON public.courts;
+CREATE POLICY "Allow public read access to courts"
+    ON public.courts FOR SELECT
+    USING (true);
+
+DROP POLICY IF EXISTS "Allow create and update courts" ON public.courts;
+CREATE POLICY "Allow create and update courts"
+    ON public.courts FOR ALL
+    USING (true);
+
+-- Seed initial courts for ven-01
+INSERT INTO public.courts (venue_id, name, type)
+VALUES
+    ('ven-01', 'Court 1', 'Premium Teak Parquet Floor'),
+    ('ven-01', 'Court 2', 'Synthetic Indoor Shoe Rubber')
+ON CONFLICT DO NOTHING;
+

@@ -478,7 +478,10 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () {},
+            onPressed: () {
+              Navigator.pop(context);
+              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Review submitted!')));
+            },
             icon: const Icon(Icons.stars, size: 18),
             label: const Text('Submit Review & Earn 50 Points', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             style: FilledButton.styleFrom(

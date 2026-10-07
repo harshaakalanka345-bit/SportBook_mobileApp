@@ -264,8 +264,45 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _showForgotPassword() {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Password reset is coming soon.')),
+    final emailController = TextEditingController(text: _emailController.text);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reset Password'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text('Enter your email address to receive a password reset link.', style: TextStyle(fontSize: 14)),
+            const SizedBox(height: 16),
+            TextField(
+              controller: emailController,
+              decoration: InputDecoration(
+                hintText: 'Email Address',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              ),
+              keyboardType: TextInputType.emailAddress,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          FilledButton(
+            onPressed: () async {
+              if (emailController.text.trim().isEmpty) return;
+              try {
+                await _service.resetPassword(emailController.text.trim());
+                if (ctx.mounted) {
+                  Navigator.pop(ctx);
+                  ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset link sent! Check your inbox.'), backgroundColor: Colors.green));
+                }
+              } catch (e) {
+                if (ctx.mounted) ScaffoldMessenger.of(ctx).showSnackBar(SnackBar(content: Text('Error: $e')));
+              }
+            },
+            child: const Text('Send Reset Link'),
+          ),
+        ],
+      ),
     );
   }
 
