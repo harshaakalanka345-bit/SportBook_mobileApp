@@ -5,9 +5,17 @@ import '../../core/app_theme.dart';
 import 'digital_match_pass_screen.dart';
 import 'modify_slot_screen.dart';
 import 'cancel_booking_screen.dart';
+import '../auth/profile_screen.dart';
+import '../notifications/notifications_screen.dart';
 
-class BookingScreen extends StatelessWidget {
+class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
+  @override
+  State<BookingScreen> createState() => _BookingScreenState();
+}
+
+class _BookingScreenState extends State<BookingScreen> {
+  String _activeTab = 'Upcoming';
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -23,7 +31,7 @@ class BookingScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _header(),
+              _header(context),
               const SizedBox(height: 22),
               Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
                 const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('My Bookings', style: TextStyle(color: ink, fontSize: 29, fontWeight: FontWeight.w800)), SizedBox(height: 4), Text('Manage your court reservations &\ndigital passes', style: TextStyle(color: muted, fontSize: 15, height: 1.3))])),
@@ -39,7 +47,7 @@ class BookingScreen extends StatelessWidget {
               _bookingCard(context, name: 'Liberty Courts', detail: 'Court 3 • Kollupitiya, Colombo 03', date: 'Saturday, 26 Oct 2024', time: '08:30 AM - 10:00 AM', price: '2,700', status: 'Scheduled', ref: '#SB-COL-2024-9102'),
               const SizedBox(height: 16),
               Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () {}, child: const Text('View History (5)'))]),
-              _completedCard(),
+              _completedCard(context),
               const SizedBox(height: 18),
               _supportCard(context),
               const SizedBox(height: 26),
@@ -51,11 +59,11 @@ class BookingScreen extends StatelessWidget {
     );
   }
 
-  Widget _header() => Row(children: [Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 23)), const SizedBox(width: 9), const Expanded(child: Text('SportsBook', style: TextStyle(color: ink, fontSize: 25, fontWeight: FontWeight.w700))), IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none_rounded, color: muted)), Container(width: 38, height: 38, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21))]);
+  Widget _header(BuildContext context) => Row(children: [Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 23)), const SizedBox(width: 9), const Expanded(child: Text('SportsBook', style: TextStyle(color: ink, fontSize: 25, fontWeight: FontWeight.w700))), IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())), icon: const Icon(Icons.notifications_none_rounded, color: muted)), GestureDetector(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())), child: Container(width: 38, height: 38, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21)))]);
 
   Widget _badge(String text) => Container(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(24)), child: Row(children: [const Icon(Icons.circle, color: AppColors.primary, size: 9), const SizedBox(width: 7), Text(text, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800, height: 1.1))]));
 
-  Widget _tabs() => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: ['Upcoming', 'Completed', 'Cancelled'].map((tab) => Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(onTap: () {}, child: Container(padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11), decoration: BoxDecoration(color: tab == 'Upcoming' ? AppColors.primary : Colors.white, borderRadius: BorderRadius.circular(24)), child: Text('$tab   ${tab == 'Upcoming' ? '2' : tab == 'Completed' ? '5' : '0'}', style: TextStyle(color: tab == 'Upcoming' ? Colors.white : muted, fontSize: 14, fontWeight: FontWeight.w600)))))).toList()));
+  Widget _tabs() => SingleChildScrollView(scrollDirection: Axis.horizontal, child: Row(children: ['Upcoming', 'Completed', 'Cancelled'].map((tab) => Padding(padding: const EdgeInsets.only(right: 8), child: GestureDetector(onTap: () { setState((){ _activeTab = tab; }); }, child: Container(padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 11), decoration: BoxDecoration(color: tab == _activeTab ? AppColors.primary : Colors.white, borderRadius: BorderRadius.circular(24)), child: Text('$tab   ${tab == 'Upcoming' ? '2' : tab == 'Completed' ? '5' : '0'}', style: TextStyle(color: tab == _activeTab ? Colors.white : muted, fontSize: 14, fontWeight: FontWeight.w600)))))).toList()));
 
   Widget _bookingCard(BuildContext context, {required String name, required String detail, required String date, required String time, required String price, required String status, required String ref, bool primary = false}) {
     return Container(
@@ -79,7 +87,7 @@ class BookingScreen extends StatelessWidget {
     );
   }
 
-  Widget _completedCard() {
+  Widget _completedCard(BuildContext context) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),

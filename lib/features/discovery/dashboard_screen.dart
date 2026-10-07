@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
+import '../auth/profile_screen.dart';
+import '../notifications/notifications_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -95,12 +97,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
               ),
-              IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none_rounded, color: _muted)),
-              Container(
-                width: 38,
-                height: 38,
-                decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21),
+              IconButton(
+                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+                icon: const Icon(Icons.notifications_none_rounded, color: _muted),
+              ),
+              GestureDetector(
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
+                child: Container(
+                  width: 38,
+                  height: 38,
+                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                  child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21),
+                ),
               ),
             ],
           ),

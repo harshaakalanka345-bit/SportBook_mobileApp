@@ -64,7 +64,7 @@ class AppTheme {
             return AppColors.primary;
           }),
           foregroundColor: WidgetStateProperty.all(Colors.white),
-          minimumSize: WidgetStateProperty.all(const Size.fromHeight(48)),
+          minimumSize: WidgetStateProperty.all(const Size(64, 48)),
           shape: WidgetStateProperty.all(
             RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(AppRadii.card),

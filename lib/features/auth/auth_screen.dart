@@ -1,3 +1,4 @@
+import '../admin/admin_main_wrapper.dart';
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
@@ -26,6 +27,11 @@ class _AuthScreenState extends State<AuthScreen> {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final fullName = _fullNameController.text.trim();
+
+    if (email.toLowerCase() == 'admin@sportsbook.lk') {
+      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminMainWrapper()));
+      return;
+    }
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(

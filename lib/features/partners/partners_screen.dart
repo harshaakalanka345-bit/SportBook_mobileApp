@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../auth/profile_screen.dart';
+import '../notifications/notifications_screen.dart';
 import '../../core/supabase_service.dart';
 import 'create_match_beacon_screen.dart';
 
@@ -37,7 +39,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildHeader(),
+              _buildHeader(context),
               const SizedBox(height: 14),
               _buildHero(),
               const SizedBox(height: 14),
@@ -61,7 +63,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
     );
   }
 
-  Widget _buildHeader() {
+  Widget _buildHeader(BuildContext context) {
     return Row(
       children: [
         Container(width: 40, height: 40, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 23)),
@@ -69,8 +71,8 @@ class _PartnersScreenState extends State<PartnersScreen> {
         Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFE6ECFF), borderRadius: BorderRadius.circular(16)), child: const Text('SPORTSBOOK', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.4))),
         const SizedBox(width: 7),
         const Expanded(child: Text('Find Partners', style: TextStyle(color: _ink, fontSize: 20, fontWeight: FontWeight.w700))),
-        IconButton(onPressed: () {}, icon: const Icon(Icons.notifications_none_rounded, color: _muted)),
-        Container(width: 38, height: 38, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21)),
+        IconButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())), icon: const Icon(Icons.notifications_none_rounded, color: _muted)),
+        GestureDetector(onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())), child: Container(width: 38, height: 38, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 21))),
       ],
     );
   }

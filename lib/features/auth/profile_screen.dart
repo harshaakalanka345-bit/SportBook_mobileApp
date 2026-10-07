@@ -1,5 +1,8 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../support/help_support_screen.dart';
+import '../notifications/notifications_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -14,7 +17,7 @@ class ProfileScreen extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              _buildTopBar(),
+              _buildTopBar(context),
               const SizedBox(height: 24),
               const _ProfileHeader(),
               const SizedBox(height: 16),
@@ -38,7 +41,7 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildTopBar() {
+  Widget _buildTopBar(BuildContext context) {
     return Row(
       children: [
         Container(
@@ -66,7 +69,7 @@ class ProfileScreen extends StatelessWidget {
           icon: const Icon(Icons.share_outlined, color: Color(0xFF4A5568)),
         ),
         IconButton(
-          onPressed: () {},
+          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
           icon: const Icon(Icons.notifications_none_rounded, color: Color(0xFF4A5568)),
         ),
         const CircleAvatar(
@@ -847,7 +850,11 @@ class _PreferencesSecurity extends StatelessWidget {
         const SizedBox(height: 12),
         _buildActionItem(Icons.security, '2-Factor Authentication', 'SMS code to +94 77 *** 4567', 'Active'),
         const SizedBox(height: 12),
-        Container(
+        GestureDetector(
+          onTap: () {
+            Navigator.push(context, MaterialPageRoute(builder: (context) => const HelpSupportScreen()));
+          },
+          child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: const Color(0xFFF1F4FF),
@@ -874,6 +881,7 @@ class _PreferencesSecurity extends StatelessWidget {
               const Icon(Icons.arrow_forward_ios_rounded, color: Color(0xFF737A8E), size: 14),
             ],
           ),
+        ),
         ),
       ],
     );
@@ -948,7 +956,7 @@ class _LogoutSection extends StatelessWidget {
           width: double.infinity,
           height: 56,
           child: TextButton.icon(
-            onPressed: () {},
+            onPressed: () async { final supabase = Supabase.instance.client; await supabase.auth.signOut(); if (!context.mounted) return; Navigator.of(context).pushNamedAndRemoveUntil('/onboarding', (route) => false); },
             icon: const Icon(Icons.logout_rounded, size: 20),
             label: const Text('Log Out of SportsBook', style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
             style: TextButton.styleFrom(
