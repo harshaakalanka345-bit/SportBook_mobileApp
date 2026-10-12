@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth_errors.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/main_wrapper.dart';
+import '../../core/role_gate.dart';
 import '../../core/supabase_service.dart';
 import 'auth_screen.dart';
 
@@ -20,7 +21,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
 
-  final _sports = <String>{'Badminton', 'Basketball'};
+  final _sports = <String>{'Badminton'};
+  String _role = 'player';
   bool _acceptedTerms = false;
   bool _passwordVisible = false;
   bool _isLoading = false;
@@ -28,14 +30,27 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
   Future<void> _createAccount() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
+    final phone = _mobileController.text.trim();
     final password = _passwordController.text.trim();
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
       _showMessage('Please complete your name, email, and password.');
       return;
     }
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      _showMessage('Please enter a valid email address.');
+      return;
+    }
+    if (phone.isNotEmpty && !RegExp(r'^\+?[0-9 ]{9,15}$').hasMatch(phone)) {
+      _showMessage('Please enter a valid mobile number.');
+      return;
+    }
     if (password.length < 8) {
       _showMessage('Password must be at least 8 characters.');
+      return;
+    }
+    if (_role == 'player' && _sports.isEmpty) {
+      _showMessage('Pick at least one favourite sport.');
       return;
     }
     if (!_acceptedTerms) {
@@ -45,33 +60,32 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
 
     setState(() => _isLoading = true);
     try {
-      await _service.signUp(email, password, name);
+      final res = await _service.signUp(
+        email,
+        password,
+        name,
+        phone: phone,
+        role: _role,
+        sports: _role == 'player' ? _sports.toList() : const [],
+      );
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Account created successfully!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainWrapper()),
-        (route) => false,
-      );
-    } catch (error) {
-      if (mounted) {
-        final message = error.toString();
+      if (res.session == null) {
+        // Email confirmation is enabled on the project: send them to log in after verifying.
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Registration error: \$message\\n(Entering Demo Mode automatically)'),
-            backgroundColor: Colors.amber,
-            duration: const Duration(seconds: 4),
+          const SnackBar(
+            content: Text('Account created. Check your inbox to verify your email, then log in.'),
+            backgroundColor: Colors.green,
+            duration: Duration(seconds: 5),
           ),
         );
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainWrapper()),
-          (route) => false,
-        );
+        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AuthScreen()));
+        return;
       }
+      goHome(context);
+    } on AuthException catch (e) {
+      if (mounted) _showMessage(authErrorMessage(e));
+    } catch (_) {
+      if (mounted) _showMessage('Could not reach the server. Check your connection and try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -109,22 +123,6 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                       fixedSize: const Size(62, 62),
                     ),
                     icon: const Icon(Icons.arrow_back_rounded, size: 30),
-                  ),
-                  const Spacer(),
-                  TextButton.icon(
-                    onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const MainWrapper()),
-                      (route) => false,
-                    ),
-                    icon: const Text('Skip'),
-                    label: const Icon(Icons.arrow_forward_rounded),
-                    style: TextButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: const Color(0xFF11182D),
-                      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-                      shape: const StadiumBorder(),
-                      textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
-                    ),
                   ),
                 ],
               ),
@@ -164,6 +162,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                 onPasswordVisibilityChanged: () {
                   setState(() => _passwordVisible = !_passwordVisible);
                 },
+                role: _role,
+                onRoleChanged: (r) => setState(() => _role = r),
                 selectedSports: _sports,
                 onSportChanged: (sport) {
                   setState(() {
@@ -233,6 +233,8 @@ class _RegistrationCard extends StatelessWidget {
     required this.passwordController,
     required this.passwordVisible,
     required this.onPasswordVisibilityChanged,
+    required this.role,
+    required this.onRoleChanged,
     required this.selectedSports,
     required this.onSportChanged,
     required this.acceptedTerms,
@@ -247,6 +249,8 @@ class _RegistrationCard extends StatelessWidget {
   final TextEditingController passwordController;
   final bool passwordVisible;
   final VoidCallback onPasswordVisibilityChanged;
+  final String role;
+  final ValueChanged<String> onRoleChanged;
   final Set<String> selectedSports;
   final ValueChanged<String> onSportChanged;
   final bool acceptedTerms;
@@ -301,7 +305,7 @@ class _RegistrationCard extends StatelessWidget {
           const SizedBox(height: 18),
           const _FieldTitle('Email Address'),
           const SizedBox(height: 8),
-          _RegistrationField(controller: emailController, hint: 'kasun.perera@gmail.com', icon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress),
+          _RegistrationField(controller: emailController, hint: 'kasunperera@gmail.com', icon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress),
           const SizedBox(height: 18),
           const _FieldTitle('Create Password'),
           const SizedBox(height: 8),
@@ -328,6 +332,17 @@ class _RegistrationCard extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 24),
+          const _FieldTitle('I am a'),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(child: _RoleOption(label: 'Player', icon: Icons.sports_tennis_rounded, selected: role == 'player', onTap: () => onRoleChanged('player'))),
+              const SizedBox(width: 10),
+              Expanded(child: _RoleOption(label: 'Court Owner', icon: Icons.storefront_rounded, selected: role == 'owner', onTap: () => onRoleChanged('owner'))),
+            ],
+          ),
+          const SizedBox(height: 24),
+          if (role == 'player') ...[
           const _FieldTitle('Favorite Sports', trailing: 'Pick at least 1'),
           const SizedBox(height: 10),
           Wrap(
@@ -340,6 +355,7 @@ class _RegistrationCard extends StatelessWidget {
               _SportChip(label: 'Padel & TT', icon: Icons.sports_handball_rounded, selected: selectedSports.contains('Padel & TT'), onTap: () => onSportChanged('Padel & TT')),
             ],
           ),
+          ],
           const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -582,6 +598,38 @@ class _RegisterSocial extends StatelessWidget {
         onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Social registration is coming soon.'))),
         style: TextButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF11182D), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), textStyle: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
         child: Text(label),
+      ),
+    );
+  }
+}
+
+class _RoleOption extends StatelessWidget {
+  const _RoleOption({required this.label, required this.icon, required this.selected, required this.onTap});
+
+  final String label;
+  final IconData icon;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : const Color(0xFFF1F4FF),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 20, color: selected ? Colors.white : AppColors.primary),
+            const SizedBox(width: 8),
+            Text(label, style: TextStyle(color: selected ? Colors.white : const Color(0xFF11182D), fontWeight: FontWeight.w700, fontSize: 15)),
+          ],
+        ),
       ),
     );
   }

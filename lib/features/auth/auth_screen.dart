@@ -1,8 +1,9 @@
-import '../admin/admin_main_wrapper.dart';
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../core/auth_errors.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/main_wrapper.dart';
+import '../../core/role_gate.dart';
 import '../../core/supabase_service.dart';
 import 'registration_screen.dart';
 
@@ -23,72 +24,55 @@ class _AuthScreenState extends State<AuthScreen> {
   bool _isLoading = false;
   bool _isPasswordVisible = false;
 
+  void _showError(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: Colors.redAccent),
+    );
+  }
+
   Future<void> _submit() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
     final fullName = _fullNameController.text.trim();
 
-    if (email.toLowerCase() == 'admin@sportsbook.lk') {
-      Navigator.pushReplacement(context, MaterialPageRoute(builder: (context) => const AdminMainWrapper()));
-      return;
-    }
-
     if (email.isEmpty || password.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please fill all required fields')),
-      );
+      _showError('Please enter your email and password.');
       return;
     }
-
+    if (!RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(email)) {
+      _showError('Please enter a valid email address.');
+      return;
+    }
     if (_isSignUp && fullName.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please enter your full name')),
-      );
+      _showError('Please enter your full name.');
       return;
     }
 
     setState(() => _isLoading = true);
-
     try {
       if (_isSignUp) {
-        await _service.signUp(email, password, fullName);
+        final res = await _service.signUp(email, password, fullName);
         if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Account created successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
+        if (res.session == null) {
+          // Email confirmation is enabled: the user must verify before signing in.
+          setState(() => _isSignUp = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Account created. Check your inbox to verify your email, then sign in.'),
+              backgroundColor: Colors.green,
+            ),
+          );
+          return;
+        }
       } else {
         await _service.signIn(email, password);
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Signed in successfully!'),
-            backgroundColor: Colors.green,
-          ),
-        );
       }
-      if (mounted) {
-        Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const MainWrapper()),
-          (route) => false,
-        );
-      }
-    } catch (e) {
       if (!mounted) return;
-      final msg = e.toString();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Auth error: \$msg\\n(Entering Demo Mode automatically)'),
-          backgroundColor: Colors.amber,
-          duration: const Duration(seconds: 4),
-        ),
-      );
-      Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const MainWrapper()),
-        (route) => false,
-      );
+      goHome(context);
+    } on AuthException catch (e) {
+      if (mounted) _showError(authErrorMessage(e));
+    } catch (e) {
+      if (mounted) _showError('Could not reach the server. Check your connection and try again.');
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -111,30 +95,6 @@ class _AuthScreenState extends State<AuthScreen> {
           padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
           child: Column(
             children: [
-              Align(
-                alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () => Navigator.of(context).pushAndRemoveUntil(
-                    MaterialPageRoute(builder: (_) => const MainWrapper()),
-                    (route) => false,
-                  ),
-                  icon: const Text('Skip'),
-                  label: const Icon(Icons.arrow_forward_rounded),
-                  style: TextButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF11182D),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    shape: const StadiumBorder(),
-                    textStyle: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 18),
               const _AuthBrandMark(),
               const SizedBox(height: 28),

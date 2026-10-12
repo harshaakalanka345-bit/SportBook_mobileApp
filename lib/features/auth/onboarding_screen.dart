@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/main_wrapper.dart';
 import 'auth_screen.dart';
+import 'onboarding_screen_4.dart';
 import 'onboarding_screen_2.dart';
 
 class OnboardingScreen extends StatelessWidget {
@@ -173,7 +173,7 @@ class OnboardingScreen extends StatelessWidget {
 
   void _openApp(BuildContext context) {
     Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const MainWrapper()),
+      MaterialPageRoute(builder: (_) => const OnboardingScreen4()),
     );
   }
 

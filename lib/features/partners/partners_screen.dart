@@ -4,7 +4,10 @@ import '../../core/app_theme.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import '../../core/supabase_service.dart';
-import 'create_match_beacon_screen.dart';
+import 'create_match_beacon_screen.dart';
+import '../../core/actions.dart';
+import '../../core/toast.dart';
+import 'all_beacons_screen.dart';
 
 class PartnersScreen extends StatefulWidget {
   const PartnersScreen({super.key});
@@ -19,6 +22,130 @@ class _PartnersScreenState extends State<PartnersScreen> {
   static const _softBlue = Color(0xFFF0F2FF);
 
   final _service = SupabaseService();
+  late Future<List<Map<String, dynamic>>> _beacons;
+  late Future<List<Map<String, dynamic>>> _friendsFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _beacons = _service.getMatchBeacons();
+    _friendsFuture = _service.getFriends();
+  }
+
+  void _reloadFriends() => setState(() => _friendsFuture = _service.getFriends());
+
+  Future<void> _addFriend() async {
+    final name = TextEditingController();
+    final contact = TextEditingController();
+    final key = GlobalKey<FormState>();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Add Friend', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Form(
+          key: key,
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextFormField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Name'), validator: (v) => (v ?? '').trim().isEmpty ? 'Enter a name' : null),
+            TextFormField(
+              controller: contact,
+              keyboardType: TextInputType.emailAddress,
+              decoration: const InputDecoration(labelText: 'Email or phone'),
+              validator: (v) {
+                final s = (v ?? '').trim();
+                final isEmail = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(s);
+                final isPhone = RegExp(r'^\+?[0-9 ]{9,15}$').hasMatch(s);
+                return (isEmail || isPhone) ? null : 'Enter a valid email or phone number';
+              },
+            ),
+          ]),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () { if (key.currentState!.validate()) Navigator.pop(ctx, true); }, child: const Text('Add')),
+        ],
+      ),
+    );
+    final n = name.text.trim();
+    final c = contact.text.trim();
+    name.dispose();
+    contact.dispose();
+    if (ok != true) return;
+    try {
+      await _service.addFriend(name: n, contact: c);
+      _reloadFriends();
+      toast('$n added to your friends');
+    } catch (e) {
+      toast('Could not add friend: $e');
+    }
+  }
+
+  Widget _realFriendCard(Map<String, dynamic> f) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Row(children: [
+        CircleAvatar(radius: 24, backgroundColor: _softBlue, child: Text('${f['friend_name']}'.isEmpty ? '?' : '${f['friend_name']}'[0].toUpperCase(), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800))),
+        const SizedBox(width: 12),
+        Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('${f['friend_name']}', style: const TextStyle(color: _ink, fontSize: 16, fontWeight: FontWeight.w700)),
+          Text('${f['friend_contact']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _muted, fontSize: 12)),
+        ])),
+        FilledButton(
+          onPressed: _showCreateBeaconSheet,
+          style: FilledButton.styleFrom(backgroundColor: AppColors.primary, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(horizontal: 14)),
+          child: const Text('Invite', style: TextStyle(fontSize: 12)),
+        ),
+        IconButton(
+          tooltip: 'Remove',
+          onPressed: () async {
+            await _service.removeFriend('${f['id']}');
+            _reloadFriends();
+          },
+          icon: const Icon(Icons.close_rounded, color: _muted, size: 18),
+        ),
+      ]),
+    );
+  }
+
+  Widget _beaconCard(Map<String, dynamic> b) {
+    return Container(
+      width: 290,
+      margin: const EdgeInsets.only(right: 10),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+            decoration: BoxDecoration(color: const Color(0xFFDCE6FF), borderRadius: BorderRadius.circular(12)),
+            child: Text('${b['sport']}'.toUpperCase(), style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+          ),
+          const SizedBox(width: 8),
+          Text('${b['skill_level']}', style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w600)),
+        ]),
+        const SizedBox(height: 14),
+        Text('${b['venue_name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: _ink, fontSize: 17, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Row(children: [
+          const Icon(Icons.schedule_rounded, size: 16, color: AppColors.primary),
+          const SizedBox(width: 6),
+          Expanded(child: Text('${b['scheduled_time']}', style: const TextStyle(color: _muted, fontSize: 13))),
+        ]),
+        const Spacer(),
+        SizedBox(
+          width: double.infinity,
+          child: FilledButton.icon(
+            onPressed: () => shareText('Match beacon: ${b['sport']} (${b['skill_level']}) at ${b['venue_name']}, ${b['scheduled_time']}. Join me on SportsBook!'),
+            icon: const Icon(Icons.share_outlined, size: 16),
+            label: const Text('Share Beacon'),
+            style: FilledButton.styleFrom(backgroundColor: AppColors.primary, shape: const StadiumBorder()),
+          ),
+        ),
+      ]),
+    );
+  }
+
   String _sport = 'Badminton';
   String _format = 'Competitive';
 
@@ -127,11 +254,58 @@ class _PartnersScreenState extends State<PartnersScreen> {
   }
 
   Widget _buildMatchHubs() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [const Text('Live Match Hubs', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), const Spacer(), TextButton(onPressed: () {}, child: const Text('View All (7)', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)))]), const SizedBox(height: 8), SizedBox(height: 220, child: ListView(scrollDirection: Axis.horizontal, children: const [_MatchHubCard(), _MatchHubCard(single: true)]))]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      FutureBuilder<List<Map<String, dynamic>>>(
+        future: _beacons,
+        builder: (context, snap) {
+          final all = snap.data ?? [];
+          return Row(children: [
+            const Text('Live Match Hubs', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)),
+            const Spacer(),
+            TextButton(
+              onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AllBeaconsScreen())),
+              child: Text('View All (${all.length})', style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
+            ),
+          ]);
+        },
+      ),
+      const SizedBox(height: 8),
+      SizedBox(
+        height: 190,
+        child: FutureBuilder<List<Map<String, dynamic>>>(
+          future: _beacons,
+          builder: (context, snap) {
+            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
+            if (snap.hasError) return Center(child: Text('Could not load match hubs: ${snap.error}', style: const TextStyle(color: _muted)));
+            final all = (snap.data ?? []).where((b) => '${b['sport']}' == _sport || _sport == 'All').toList();
+            if (all.isEmpty) return Center(child: Text('No $_sport beacons yet. Tap "Request a Partner" to start one.', textAlign: TextAlign.center, style: const TextStyle(color: _muted)));
+            return ListView(scrollDirection: Axis.horizontal, children: [for (final b in all) _beaconCard(b)]);
+          },
+        ),
+      ),
+    ]);
   }
 
   Widget _buildFriends() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Row(children: [const Text('My Friends', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), const SizedBox(width: 8), Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: const Color(0xFFDDF6E9), borderRadius: BorderRadius.circular(15)), child: const Text('4 Online', style: TextStyle(color: Color(0xFF15945B), fontSize: 11, fontWeight: FontWeight.w700))), const Spacer(), TextButton.icon(onPressed: () {}, icon: const Icon(Icons.person_add_alt_1_outlined, size: 17), label: const Text('Add Friend'))]), const Text('Connect and schedule matches with your\nclose circle', style: TextStyle(color: _muted, fontSize: 14, height: 1.3)), const SizedBox(height: 10), ..._friends.map(_friendCard)]);
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Text('My Friends', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)),
+        const Spacer(),
+        TextButton.icon(onPressed: _addFriend, icon: const Icon(Icons.person_add_alt_1_outlined, size: 17), label: const Text('Add Friend')),
+      ]),
+      const Text('Connect and schedule matches with your\nclose circle', style: TextStyle(color: _muted, fontSize: 14, height: 1.3)),
+      const SizedBox(height: 10),
+      FutureBuilder<List<Map<String, dynamic>>>(
+        future: _friendsFuture,
+        builder: (context, snap) {
+          if (snap.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()));
+          if (snap.hasError) return Text('Could not load friends: ${snap.error}', style: const TextStyle(color: _muted));
+          final list = snap.data ?? [];
+          if (list.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('No friends yet. Tap "Add Friend" to build your squad.', style: TextStyle(color: _muted)));
+          return Column(children: [for (final f in list) _realFriendCard(f)]);
+        },
+      ),
+    ]);
   }
 
   Widget _friendCard((String, String, String, String, String, String) friend) {

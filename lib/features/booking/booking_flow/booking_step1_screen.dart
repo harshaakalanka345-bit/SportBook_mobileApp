@@ -1,10 +1,189 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/booking_draft.dart';
+import '../../../core/supabase_service.dart';
 import 'booking_step2_screen.dart';
 
-class BookingStep1Screen extends StatelessWidget {
-  const BookingStep1Screen({super.key});
+class BookingStep1Screen extends StatefulWidget {
+  const BookingStep1Screen({super.key, this.venue});
+
+  /// Venue row from the `venues` table. Falls back to a demo venue when null.
+  final Map<String, dynamic>? venue;
+
+  @override
+  State<BookingStep1Screen> createState() => _BookingStep1ScreenState();
+}
+
+class _Slot {
+  final int id;
+  final String time;
+  final int price;
+  final int startHour;
+  const _Slot(this.id, this.time, this.price, this.startHour);
+}
+
+class _BookingStep1ScreenState extends State<BookingStep1Screen> {
+  static const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  static const _days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  static const _slots = [
+    _Slot(0, '06:00 - 07:00 AM', 2000, 6),
+    _Slot(1, '07:00 - 08:00 AM', 2000, 7),
+    _Slot(2, '08:00 - 09:00 AM', 2000, 8),
+    _Slot(3, '09:30 - 10:30 AM', 2000, 9),
+    _Slot(4, '01:00 - 02:00 PM', 2200, 13),
+    _Slot(5, '03:00 - 04:00 PM', 2200, 15),
+    _Slot(6, '04:00 - 05:00 PM', 2500, 16),
+    _Slot(7, '06:00 - 07:00 PM', 2500, 18),
+    _Slot(8, '07:00 - 08:00 PM', 2500, 19),
+    _Slot(9, '08:00 - 09:00 PM', 2500, 20),
+    _Slot(10, '09:00 - 10:00 PM', 2200, 21),
+  ];
+  static const _durations = [1.0, 1.5, 2.0, 3.0];
+
+  final _service = SupabaseService();
+  List<Map<String, dynamic>> _courts = [];
+  final Set<String> _taken = {}; // "<court name>|<slot label>" for the selected date
+  final Map<String, double> _surges = {}; // "<court name>|<slot label>" -> extra LKR set by the owner
+  bool _loadingSlots = true;
+  String? _slotError;
+
+  Map<String, dynamic> get _venue => widget.venue ?? const {'name': 'Sports Venue', 'sport': 'Badminton', 'hourly_rate': 2500, 'area': 'Colombo'};
+  double get _venueRate => (_venue['hourly_rate'] as num?)?.toDouble() ?? 2000;
+  Map<String, dynamic> get _courtRow => _courts.isEmpty ? const {} : _courts[_court.clamp(0, _courts.length - 1)];
+  String get _courtName => (_courtRow['name'] as String?) ?? 'Court 1';
+
+  late final DateTime _today;
+  late DateTime _selectedDate;
+  late DateTime _stripStart;
+  int _court = 0;
+  double _hours = 2.0;
+  int? _startSlot;
+
+  @override
+  void initState() {
+    super.initState();
+    final n = DateTime.now();
+    _today = DateTime(n.year, n.month, n.day);
+    _selectedDate = _today;
+    _stripStart = _today;
+    _loadCourts();
+  }
+
+  Future<void> _loadCourts() async {
+    final id = _venue['id'] as String?;
+    var courts = <Map<String, dynamic>>[];
+    if (id != null) {
+      try {
+        courts = (await _service.getVenueCourts(id)).where((c) => (c['is_active'] as bool?) ?? true).toList();
+      } catch (_) {}
+    }
+    if (courts.isEmpty) {
+      courts = [
+        {'name': 'Court 1', 'type': 'Standard'},
+        {'name': 'Court 2', 'type': 'Standard'},
+      ];
+    }
+    if (!mounted) return;
+    setState(() => _courts = courts);
+    await _loadTaken();
+  }
+
+  Future<void> _loadTaken() async {
+    final id = _venue['id'] as String?;
+    setState(() {
+      _loadingSlots = true;
+      _slotError = null;
+      _taken.clear();
+      _surges.clear();
+    });
+    if (id != null) {
+      try {
+        try {
+          for (final s in await _service.getSurges(id, _isoDate(_selectedDate))) {
+            _surges['${s['court_name']}|${s['time_slot']}'] = (s['amount'] as num).toDouble();
+          }
+        } catch (_) {}
+        final rows = await _service.getBookedSlots(id, _isoDate(_selectedDate));
+        for (final r in rows) {
+          for (final label in '${r['time_slot']}'.split(', ')) {
+            _taken.add('${r['court_name']}|$label');
+          }
+        }
+      } catch (e) {
+        _slotError = 'Live availability unavailable ($e)';
+      }
+    }
+    if (mounted) setState(() => _loadingSlots = false);
+  }
+
+  String _isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  int _priceOf(_Slot s) {
+    final base = (_courtRow['hourly_rate'] as num?)?.toDouble() ?? _venueRate;
+    final mult = s.startHour < 12 ? 0.8 : (s.startHour < 17 ? 0.9 : 1.0);
+    return ((base * mult) / 50).round() * 50 + (_surges['$_courtName|${s.time}'] ?? 0).round();
+  }
+
+  bool _isBooked(int id, DateTime d, int court) {
+    final slot = _slots[id];
+    if (d == _today && slot.startHour <= DateTime.now().hour) return true; // already started
+    return _taken.contains('$_courtName|${slot.time}');
+  }
+
+  /// Consecutive slots covered by the current selection (stops at a booked slot or a gap).
+  List<_Slot> get _selection {
+    if (_startSlot == null) return [];
+    final need = _hours.ceil();
+    final out = <_Slot>[];
+    for (var i = _startSlot!; i < _slots.length && out.length < need; i++) {
+      if (_isBooked(_slots[i].id, _selectedDate, _court)) break;
+      if (out.isNotEmpty && _slots[i].startHour - out.last.startHour > 1) break;
+      out.add(_slots[i]);
+    }
+    return out;
+  }
+
+  int get _total {
+    var remaining = _hours;
+    var sum = 0.0;
+    for (final s in _selection) {
+      final portion = remaining >= 1 ? 1.0 : remaining;
+      sum += _priceOf(s) * portion;
+      remaining -= portion;
+    }
+    return sum.round();
+  }
+
+  String _fmt(int n) => n.toString().replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+
+  String _dayLabel(DateTime d) {
+    if (d == _today) return 'Today';
+    if (d == _today.add(const Duration(days: 1))) return 'Tomorrow';
+    final name = _days[d.weekday - 1];
+    return '${name[0]}${name.substring(1).toLowerCase()}, ${_months[d.month - 1].substring(0, 3)} ${d.day}';
+  }
+
+  String _hourLabel(int h) {
+    final h12 = h % 12 == 0 ? 12 : h % 12;
+    return '$h12:00 ${h >= 12 ? 'PM' : 'AM'}';
+  }
+
+  Future<void> _pickDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDate,
+      firstDate: _today,
+      lastDate: _today.add(const Duration(days: 90)),
+    );
+    if (picked == null) return;
+    setState(() {
+      _selectedDate = DateTime(picked.year, picked.month, picked.day);
+      _stripStart = _selectedDate;
+      _startSlot = null;
+    });
+    _loadTaken();
+  }
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -24,7 +203,7 @@ class BookingStep1Screen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Text('SPORTSBOOK â€¢ BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+            Text('SPORTSBOOK • BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
             Text('Select Slot & Court', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
           ],
         ),
@@ -57,6 +236,8 @@ class BookingStep1Screen extends StatelessWidget {
                   _buildDurationSelector(),
                   const SizedBox(height: 24),
                   _buildLegend(),
+                  if (_loadingSlots) const Padding(padding: EdgeInsets.only(top: 12), child: LinearProgressIndicator(minHeight: 2)),
+                  if (_slotError != null) Padding(padding: const EdgeInsets.only(top: 8), child: Text(_slotError!, style: const TextStyle(color: Colors.redAccent, fontSize: 10))),
                   const SizedBox(height: 24),
                   _buildMorningSlots(),
                   const SizedBox(height: 24),
@@ -81,7 +262,7 @@ class BookingStep1Screen extends StatelessWidget {
       child: Row(
         children: [
           const Text('STEP 1 OF 4', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
-          const Text(' â€¢ Slot & Court Selection', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)),
+          const Text(' • Slot & Court Selection', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)),
           const Spacer(),
           Container(width: 16, height: 4, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
           const SizedBox(width: 4),
@@ -122,25 +303,25 @@ class BookingStep1Screen extends StatelessWidget {
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
                           decoration: BoxDecoration(color: const Color(0xFFE6F0FF), borderRadius: BorderRadius.circular(6)),
                           child: Row(
-                            children: const [
-                              Icon(Icons.verified_rounded, size: 10, color: AppColors.primary),
-                              SizedBox(width: 4),
-                              Text('BWF Approved', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w700)),
+                            children: [
+                              const Icon(Icons.verified_rounded, size: 10, color: AppColors.primary),
+                              const SizedBox(width: 4),
+                              Text('${_venue['environment'] ?? 'Indoor'}', style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w700)),
                             ],
                           ),
                         ),
                         const SizedBox(width: 8),
-                        const Text('BADMINTON', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
+                        Text('${_venue['sport'] ?? 'Sport'}'.toUpperCase(), style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
                       ],
                     ),
                     const SizedBox(height: 6),
-                    const Text('CSA National Arena', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+                    Text('${_venue['name']}', maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
                     Row(
-                      children: const [
-                        Icon(Icons.location_on_outlined, size: 12, color: muted),
-                        SizedBox(width: 4),
-                        Text('Maitland Place, Colombo', style: TextStyle(color: muted, fontSize: 10)),
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: muted),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text('${_venue['address'] ?? _venue['area'] ?? ''}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 10))),
                       ],
                     ),
                   ],
@@ -148,10 +329,10 @@ class BookingStep1Screen extends StatelessWidget {
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: const [
-                  Text('STARTS AT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                  Text('LKR 2,500', style: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w800)),
-                  Text('per hour', style: TextStyle(color: muted, fontSize: 10)),
+                children: [
+                  const Text('STARTS AT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
+                  Text('LKR ${_fmt(_venueRate.round())}', style: const TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w800)),
+                  const Text('per hour', style: TextStyle(color: muted, fontSize: 10)),
                 ],
               ),
             ],
@@ -164,11 +345,11 @@ class BookingStep1Screen extends StatelessWidget {
               children: [
                 const Icon(Icons.grid_view_rounded, size: 16, color: AppColors.primary),
                 const SizedBox(width: 8),
-                const Expanded(child: Text('Indoor Wooden Parquet', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600))),
+                Expanded(child: Text('${_courtRow['type'] ?? 'Standard surface'}', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600))),
                 Container(width: 1, height: 24, color: const Color(0xFFE9EEFF), margin: const EdgeInsets.symmetric(horizontal: 12)),
                 const Icon(Icons.lightbulb_outline_rounded, size: 16, color: AppColors.primary),
                 const SizedBox(width: 8),
-                const Expanded(child: Text('Floodlit Pro 800 Lux', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(((_venue['amenities'] as List?)?.isNotEmpty ?? false) ? '${(_venue['amenities'] as List).first}' : 'Facilities on site', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600))),
               ],
             ),
           ),
@@ -178,26 +359,31 @@ class BookingStep1Screen extends StatelessWidget {
   }
 
   Widget _buildCalendar() {
+    final days = List.generate(5, (i) => _stripStart.add(Duration(days: i)));
     return Column(
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             Row(
-              children: const [
-                Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text('October 2024', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
+              children: [
+                const Icon(Icons.calendar_month_rounded, size: 18, color: AppColors.primary),
+                const SizedBox(width: 8),
+                Text('${_months[_selectedDate.month - 1]} ${_selectedDate.year}', style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
               ],
             ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                children: const [
-                  Text('Calendar', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-                  Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: AppColors.primary),
-                ],
+            InkWell(
+              borderRadius: BorderRadius.circular(16),
+              onTap: _pickDate,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
+                child: Row(
+                  children: const [
+                    Text('Calendar', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                    Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: AppColors.primary),
+                  ],
+                ),
               ),
             ),
           ],
@@ -206,33 +392,50 @@ class BookingStep1Screen extends StatelessWidget {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _dateBox('THU', '24', 'Today', true),
-            _dateBox('FRI', '25', '4 slots', false),
-            _dateBox('SAT', '26', '2 slots', false, isWeekend: true),
-            _dateBox('SUN', '27', '6 slots', false, isWeekend: true),
-            _dateBox('MON', '28', '8 slots', false),
+            for (final d in days)
+              _dateBox(
+                _days[d.weekday - 1],
+                '${d.day}',
+                d == _today ? 'Today' : (d == _today.add(const Duration(days: 1)) ? 'Tomorrow' : 'Open'),
+                d == _selectedDate,
+                isWeekend: d.weekday >= 6,
+                onTap: () {
+                  setState(() {
+                    _selectedDate = d;
+                    _startSlot = null;
+                  });
+                  _loadTaken();
+                },
+              ),
           ],
         ),
       ],
     );
   }
 
-  Widget _dateBox(String day, String date, String subtitle, bool active, {bool isWeekend = false}) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      decoration: BoxDecoration(
-        color: active ? AppColors.primary : Colors.white,
+  Widget _dateBox(String day, String date, String subtitle, bool active, {bool isWeekend = false, VoidCallback? onTap}) {
+    return Material(
+      color: active ? AppColors.primary : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: active ? null : Border.all(color: const Color(0xFFE9EEFF)),
-      ),
-      child: Column(
-        children: [
-          Text(day, style: TextStyle(color: active ? Colors.white : (isWeekend ? Colors.red : muted), fontSize: 10, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(date, style: TextStyle(color: active ? Colors.white : ink, fontSize: 20, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Text(subtitle, style: TextStyle(color: active ? Colors.white70 : muted, fontSize: 9)),
-        ],
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: active ? null : Border.all(color: const Color(0xFFE9EEFF)),
+          ),
+          child: Column(
+            children: [
+              Text(day, style: TextStyle(color: active ? Colors.white : (isWeekend ? Colors.red : muted), fontSize: 10, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(date, style: TextStyle(color: active ? Colors.white : ink, fontSize: 20, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              Text(subtitle, style: TextStyle(color: active ? Colors.white70 : muted, fontSize: 9)),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -279,50 +482,49 @@ class BookingStep1Screen extends StatelessWidget {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('SELECT COURT', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
-            Text('3 Courts Available', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+          children: [
+            const Text('SELECT COURT', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
+            Text('${_courts.length} Courts Available', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
           ],
         ),
         const SizedBox(height: 12),
         Row(
           children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.person_outline_rounded, size: 16, color: Colors.white),
-                    SizedBox(width: 6),
-                    Text('Court 1 (Wooden)', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE9EEFF))),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: const [
-                    Icon(Icons.layers_outlined, size: 16, color: ink),
-                    SizedBox(width: 6),
-                    Text('Court 2 (Syn)', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
+            for (var i = 0; i < _courts.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(child: _courtChip(i)),
+            ],
           ],
         ),
       ],
     );
   }
 
+  Widget _courtChip(int i) {
+    final active = _court == i;
+    return Material(
+      color: active ? AppColors.primary : Colors.white,
+      borderRadius: BorderRadius.circular(12),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            _court = i;
+            _startSlot = null;
+          });
+          _loadTaken();
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          decoration: BoxDecoration(borderRadius: BorderRadius.circular(12), border: active ? null : Border.all(color: const Color(0xFFE9EEFF))),
+          child: Text('${_courts[i]['name']}', textAlign: TextAlign.center, style: TextStyle(color: active ? Colors.white : ink, fontSize: 11, fontWeight: FontWeight.w600)),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDurationSelector() {
+    final mins = (_hours * 60).round();
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
@@ -337,7 +539,7 @@ class BookingStep1Screen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
                 decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
-                child: const Text('120 Mins', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                child: Text('$mins Mins', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -345,10 +547,7 @@ class BookingStep1Screen extends StatelessWidget {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              _durationBox('1.0 Hr', false),
-              _durationBox('1.5 Hrs', false),
-              _durationBox('2.0 Hrs', true),
-              _durationBox('3.0 Hrs', false),
+              for (final h in _durations) _durationBox('${h.toStringAsFixed(1)} ${h == 1 ? 'Hr' : 'Hrs'}', _hours == h, () => setState(() => _hours = h)),
             ],
           ),
         ],
@@ -356,14 +555,18 @@ class BookingStep1Screen extends StatelessWidget {
     );
   }
 
-  Widget _durationBox(String label, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-      decoration: BoxDecoration(
-        color: active ? AppColors.primary : const Color(0xFFF3F4F6),
+  Widget _durationBox(String label, bool active, VoidCallback onTap) {
+    return Material(
+      color: active ? AppColors.primary : const Color(0xFFF3F4F6),
+      borderRadius: BorderRadius.circular(10),
+      child: InkWell(
         borderRadius: BorderRadius.circular(10),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          child: Text(label, style: TextStyle(color: active ? Colors.white : ink, fontSize: 12, fontWeight: FontWeight.w700)),
+        ),
       ),
-      child: Text(label, style: TextStyle(color: active ? Colors.white : ink, fontSize: 12, fontWeight: FontWeight.w700)),
     );
   }
 
@@ -402,193 +605,94 @@ class BookingStep1Screen extends StatelessWidget {
     );
   }
 
-  Widget _buildMorningSlots() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Row(
-              children: [
-                Icon(Icons.wb_twilight_rounded, size: 16, color: muted),
-                SizedBox(width: 8),
-                Text('Morning Slots', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-              ],
-            ),
-            Text('06:00 AM - 12:00 PM', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _slotBox('06:00 - 07:00 AM', 'LKR 2,000', 'Booked', false, isBooked: true)),
-            const SizedBox(width: 12),
-            Expanded(child: _slotBox('07:00 - 08:00 AM', 'LKR 2,000', 'Open', false)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _slotBox('08:00 - 09:00 AM', 'LKR 2,000', 'Open', false)),
-            const SizedBox(width: 12),
-            Expanded(child: _slotBox('09:30 - 10:30 AM', 'LKR 2,000', 'Open', false)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAfternoonSlots() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Row(
-              children: [
-                Icon(Icons.wb_sunny_outlined, size: 16, color: muted),
-                SizedBox(width: 8),
-                Text('Afternoon Slots', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-              ],
-            ),
-            Text('12:00 PM - 05:00 PM', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _slotBox('01:00 - 02:00 PM', 'LKR 2,200', 'Open', false)),
-            const SizedBox(width: 12),
-            Expanded(child: _slotBox('03:00 - 04:00 PM', 'LKR 2,200', 'Booked', false, isBooked: true)),
-          ],
-        ),
-        const SizedBox(height: 12),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('04:00 - 05:00 PM', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-                  Text('Pre-Peak Transition', style: TextStyle(color: muted, fontSize: 10)),
-                ],
-              ),
-              Row(
-                children: [
-                  const Text('LKR 2,500', style: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w800)),
-                  const SizedBox(width: 12),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                    decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(20)),
-                    child: const Text('Select', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildPrimeEveningSlots() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: const [
-                Icon(Icons.nightlight_outlined, size: 16, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text('Prime Evening / Floodlit', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-              ],
-            ),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFFFFF0F0), borderRadius: BorderRadius.circular(8)),
-              child: const Text('High Demand', style: TextStyle(color: Colors.red, fontSize: 9, fontWeight: FontWeight.w700)),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFFF4F7FF), borderRadius: BorderRadius.circular(20)),
-          child: Column(
-            children: [
-              Row(
-                children: [
-                  Container(
-                    width: 24,
-                    height: 24,
-                    decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                    alignment: Alignment.center,
-                    child: const Text('2h', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 12),
-                  const Expanded(
-                    child: Text('Consecutive 2-Hour Window', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700, height: 1.3)),
-                  ),
-                  const Text('ACTIVE\nGROUP', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800, height: 1.3), textAlign: TextAlign.right),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(child: _slotBox('06:00 - 07:00 PM', 'LKR 2,500', 'Slot 1', true, showCheck: true)),
-                  const SizedBox(width: 12),
-                  Expanded(child: _slotBox('07:00 - 08:00 PM', 'LKR 2,500', 'Slot 2', true, showCheck: true)),
-                ],
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(child: _slotBox('08:00 - 09:00 PM', 'LKR 2,500', 'Fast Selling', false, isFastSelling: true)),
-            const SizedBox(width: 12),
-            Expanded(child: _slotBox('09:00 - 10:00 PM', 'LKR 2,200', 'Open', false)),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _slotBox(String time, String price, String status, bool active, {bool isBooked = false, bool showCheck = false, bool isFastSelling = false}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: active ? AppColors.primary : (isBooked ? const Color(0xFFF3F4F6) : Colors.white),
-        borderRadius: BorderRadius.circular(16),
-        border: active || isBooked ? null : Border.all(color: const Color(0xFFE9EEFF)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _section(IconData icon, String title, String range, List<int> ids, {Widget? badge}) {
+    final rows = <Widget>[];
+    for (var i = 0; i < ids.length; i += 2) {
+      if (i > 0) rows.add(const SizedBox(height: 12));
+      rows.add(Row(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(time, style: TextStyle(color: active ? Colors.white : (isBooked ? muted : ink), fontSize: 10, fontWeight: FontWeight.w700)),
-              if (showCheck) const Icon(Icons.check_circle_rounded, size: 14, color: Colors.white)
-              else if (isBooked) const Icon(Icons.lock_outline_rounded, size: 14, color: muted)
-              else if (isFastSelling) Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: const Color(0xFFFFF0F0), borderRadius: BorderRadius.circular(4)), child: const Text('1 Left', style: TextStyle(color: Colors.red, fontSize: 8, fontWeight: FontWeight.w700)))
-              else const Icon(Icons.circle, size: 8, color: AppColors.primary),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(price, style: TextStyle(color: active ? Colors.white : (isBooked ? muted : AppColors.primary), fontSize: 14, fontWeight: FontWeight.w800, decoration: isBooked ? TextDecoration.lineThrough : null)),
-              Text(status, style: TextStyle(color: active ? Colors.white70 : (isFastSelling ? Colors.red : muted), fontSize: 9, fontWeight: FontWeight.w600)),
-            ],
-          ),
+          Expanded(child: _slotBox(_slots[ids[i]])),
+          const SizedBox(width: 12),
+          Expanded(child: i + 1 < ids.length ? _slotBox(_slots[ids[i + 1]]) : const SizedBox()),
         ],
+      ));
+    }
+    return Column(
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 16, color: muted),
+                const SizedBox(width: 8),
+                Text(title, style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
+              ],
+            ),
+            badge ?? Text(range, style: const TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
+          ],
+        ),
+        const SizedBox(height: 16),
+        ...rows,
+      ],
+    );
+  }
+
+  Widget _buildMorningSlots() => _section(Icons.wb_twilight_rounded, 'Morning Slots', '06:00 AM - 12:00 PM', [0, 1, 2, 3]);
+
+  Widget _buildAfternoonSlots() => _section(Icons.wb_sunny_outlined, 'Afternoon Slots', '12:00 PM - 05:00 PM', [4, 5, 6]);
+
+  Widget _buildPrimeEveningSlots() => _section(
+        Icons.nightlight_outlined,
+        'Prime Evening / Floodlit',
+        '',
+        [7, 8, 9, 10],
+        badge: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(color: const Color(0xFFFFF0F0), borderRadius: BorderRadius.circular(8)),
+          child: const Text('High Demand', style: TextStyle(color: Colors.red, fontSize: 9, fontWeight: FontWeight.w700)),
+        ),
+      );
+
+  Widget _slotBox(_Slot s) {
+    final isBooked = _isBooked(s.id, _selectedDate, _court);
+    final active = _selection.any((x) => x.id == s.id);
+    final status = isBooked ? 'Booked' : (active ? 'Selected' : 'Open');
+    return Material(
+      color: active ? AppColors.primary : (isBooked ? const Color(0xFFF3F4F6) : Colors.white),
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: isBooked ? null : () => setState(() => _startSlot = (active && _startSlot == s.id) ? null : s.id),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: active || isBooked ? null : Border.all(color: const Color(0xFFE9EEFF)),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(s.time, style: TextStyle(color: active ? Colors.white : (isBooked ? muted : ink), fontSize: 10, fontWeight: FontWeight.w700)),
+                  if (active) const Icon(Icons.check_circle_rounded, size: 14, color: Colors.white)
+                  else if (isBooked) const Icon(Icons.lock_outline_rounded, size: 14, color: muted)
+                  else const Icon(Icons.circle, size: 8, color: AppColors.primary),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text('LKR ${_fmt(_priceOf(s))}', style: TextStyle(color: active ? Colors.white : (isBooked ? muted : AppColors.primary), fontSize: 14, fontWeight: FontWeight.w800, decoration: isBooked ? TextDecoration.lineThrough : null)),
+                  Text(status, style: TextStyle(color: active ? Colors.white70 : muted, fontSize: 9, fontWeight: FontWeight.w600)),
+                ],
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -636,6 +740,11 @@ class BookingStep1Screen extends StatelessWidget {
   }
 
   Widget _buildBottomBar(BuildContext context) {
+    final sel = _selection;
+    final hasSel = sel.isNotEmpty;
+    final label = hasSel
+        ? '${_dayLabel(_selectedDate)}, ${_hourLabel(sel.first.startHour)} - ${_hourLabel(sel.first.startHour + sel.length)} '
+        : 'Select a time slot ';
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       decoration: const BoxDecoration(
@@ -649,17 +758,17 @@ class BookingStep1Screen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                children: const [
-                  Icon(Icons.circle, size: 8, color: AppColors.primary),
-                  SizedBox(width: 6),
-                  Text('Today, 6:00 PM - 8:00 PM ', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-                  Text('(Court 1)', style: TextStyle(color: muted, fontSize: 11)),
+                children: [
+                  const Icon(Icons.circle, size: 8, color: AppColors.primary),
+                  const SizedBox(width: 6),
+                  Text(label, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
+                  if (hasSel) Text('(Court ${_court + 1})', style: const TextStyle(color: muted, fontSize: 11)),
                 ],
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(6)),
-                child: const Text('2 Hours', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
+                child: Text('${_hours == _hours.roundToDouble() ? _hours.round() : _hours} Hours', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -674,20 +783,34 @@ class BookingStep1Screen extends StatelessWidget {
                   Row(
                     crossAxisAlignment: CrossAxisAlignment.baseline,
                     textBaseline: TextBaseline.alphabetic,
-                    children: const [
-                      Text('LKR ', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
-                      Text('5,000', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w800)),
+                    children: [
+                      const Text('LKR ', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
+                      Text(_fmt(_total), style: const TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w800)),
                     ],
                   ),
-                  const Text('2 hrs @ LKR 2,500/hr', style: TextStyle(color: muted, fontSize: 9)),
+                  Text(hasSel ? '${sel.length} slot${sel.length > 1 ? 's' : ''} selected' : 'No slot selected', style: const TextStyle(color: muted, fontSize: 9)),
                 ],
               ),
               const SizedBox(width: 24),
               Expanded(
                 child: FilledButton(
-                  onPressed: () {
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep2Screen()));
-                  },
+                  onPressed: !hasSel
+                      ? null
+                      : () {
+                          BookingDraft.start(
+                            venue: widget.venue,
+                            courtName: _courtName,
+                            courtType: '${_courtRow['type'] ?? ''}',
+                            date: _selectedDate,
+                            slotLabels: sel.map((s) => s.time).toList(),
+                            timeRange: '${_hourLabel(sel.first.startHour)} - ${_hourLabel(sel.first.startHour + sel.length)}',
+                            hours: _hours,
+                            courtFee: _total.toDouble(),
+                            startAt: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, sel.first.startHour),
+                            endAt: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, sel.first.startHour + sel.length),
+                          );
+                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep2Screen()));
+                        },
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,

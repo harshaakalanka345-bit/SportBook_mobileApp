@@ -1,631 +1,306 @@
 import 'package:flutter/material.dart';
-import '../../core/app_theme.dart';
-import 'admin_profile_screen.dart';
-import '../notifications/notifications_screen.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 
-class AdminScannerScreen extends StatelessWidget {
+import '../../core/app_theme.dart';
+import '../../core/slots.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
+import 'admin_profile_screen.dart';
+
+/// Gate scanner: scan a match-pass QR (or type a booking reference / 4-digit PIN), verify it and check the player in.
+class AdminScannerScreen extends StatefulWidget {
   const AdminScannerScreen({super.key});
 
+  @override
+  State<AdminScannerScreen> createState() => _AdminScannerScreenState();
+}
+
+class _AdminScannerScreenState extends State<AdminScannerScreen> {
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
   static const softBlue = Color(0xFFF0F2FF);
 
+  final _service = SupabaseService();
+  final _code = TextEditingController();
+  MobileScannerController? _camera;
+  bool _cameraOn = false;
+  bool _busy = false;
+  String? _lastCode;
+
+  _Result? _result;
+  final List<_Result> _recent = [];
+
+  @override
+  void dispose() {
+    _code.dispose();
+    _camera?.dispose();
+    super.dispose();
+  }
+
+  void _toggleCamera() {
+    if (_cameraOn) {
+      _camera?.dispose();
+      _camera = null;
+      setState(() => _cameraOn = false);
+    } else {
+      _camera = MobileScannerController(formats: const [BarcodeFormat.qrCode], detectionSpeed: DetectionSpeed.noDuplicates);
+      setState(() => _cameraOn = true);
+    }
+  }
+
+  String _extract(String raw) {
+    final parts = raw.split('|');
+    if (parts.length >= 3 && parts.first == 'SPORTSBOOK') return parts[1];
+    return raw.trim();
+  }
+
+  Future<void> _verify(String raw, {bool fromCamera = false}) async {
+    final code = _extract(raw);
+    if (code.isEmpty || _busy) return;
+    if (fromCamera && code == _lastCode) return;
+    _lastCode = code;
+    setState(() => _busy = true);
+    try {
+      final b = await _service.findBookingForCheckin(code);
+      final res = _evaluate(code, b);
+      if (!mounted) return;
+      setState(() {
+        _result = res;
+        _recent.insert(0, res);
+        if (_recent.length > 8) _recent.removeLast();
+      });
+    } catch (e) {
+      toast('Lookup failed: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Decide whether the pass is valid right now.
+  _Result _evaluate(String code, Map<String, dynamic>? b) {
+    if (b == null) return _Result(code: code, ok: false, title: 'Pass not found', reason: 'No booking matches "$code" at your complexes.');
+    final status = '${b['status']}';
+    final date = '${b['date_schedule']}';
+    final today = isoDate(DateTime.now());
+    final labels = '${b['time_slot']}'.split(', ');
+    final slots = kSlots.where((s) => labels.contains(s.label)).toList();
+    String? problem;
+    if (status == 'Cancelled') {
+      problem = 'This booking was cancelled.';
+    } else if (date != today) {
+      problem = date.compareTo(today) > 0 ? 'Booked for a future date ($date).' : 'This pass expired on $date.';
+    } else if (slots.isNotEmpty) {
+      final now = DateTime.now();
+      final start = slots.first.startOn(DateTime.now()).subtract(const Duration(minutes: 30));
+      final end = slots.last.endOn(DateTime.now());
+      if (now.isBefore(start)) {
+        problem = 'Too early - entry opens at ${shortTime(start)}.';
+      } else if (now.isAfter(end)) {
+        problem = 'Session ended at ${shortTime(end)}.';
+      }
+    }
+    final already = status == 'Checked-in';
+    return _Result(
+      code: code,
+      booking: b,
+      ok: problem == null,
+      alreadyIn: already && problem == null,
+      title: problem != null ? 'Access denied' : (already ? 'Already checked in' : 'Access granted'),
+      reason: problem ?? (already ? 'This player has already entered.' : 'Valid pass for today.'),
+    );
+  }
+
+  Future<void> _checkIn(_Result r) async {
+    final ref = r.booking?['booking_ref'] as String?;
+    if (ref == null) return;
+    try {
+      await _service.setBookingStatus(ref, 'Checked-in');
+      toast('Checked in ${r.booking!['court_name']}');
+      setState(() {
+        final updated = _Result(code: r.code, booking: {...r.booking!, 'status': 'Checked-in'}, ok: true, alreadyIn: true, title: 'Checked in', reason: 'Turnstile unlocked.');
+        _result = updated;
+        _recent[_recent.indexWhere((x) => x.code == r.code)] = updated;
+      });
+    } catch (e) {
+      toast('Could not check in: $e');
+    }
+  }
+
+  Future<void> _manualUnlock(_Result r) async {
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Manual unlock', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Text(r.ok ? 'Unlock the turnstile for ${r.booking?['booking_ref']} and check the player in?' : 'This pass is not valid (${r.reason}). Override and let the player in anyway?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Unlock & check in')),
+        ],
+      ),
+    );
+    if (ok == true) await _checkIn(r);
+  }
+
+  Future<void> _flagShoes(_Result r) async {
+    final b = r.booking;
+    if (b == null) return;
+    try {
+      await _service.createIncident(
+        venueId: b['venue_id'] as String?,
+        courtName: b['court_name'] as String?,
+        category: 'Safety hazard',
+        severity: 'Low',
+        description: 'Non-marking shoe check flagged at the gate for booking ${b['booking_ref']}. Player must change footwear before entering the court.',
+      );
+      toast('Flagged - logged in the incident desk.');
+    } catch (e) {
+      toast('Could not flag: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final r = _result;
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8FF),
       body: SafeArea(
         child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
           children: [
-            _buildAppBar(),
-            const SizedBox(height: 20),
-            _buildGateHeader(),
-            const SizedBox(height: 20),
-            _buildTabs(),
-            const SizedBox(height: 16),
-            _buildScannerViewport(),
-            const SizedBox(height: 16),
-            _buildScannerControls(),
-            const SizedBox(height: 24),
-            _buildAccessGrantedCard(),
-            const SizedBox(height: 32),
-            const Center(
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.verified_user_outlined, color: muted, size: 12),
-                      SizedBox(width: 4),
-                      Text('COLOMBO SPORTS AUTHORITY • SECURE OPTICAL GATE', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                  SizedBox(height: 4),
-                  Text('Floor Terminal #02 (Gate B) • FastPass v2.4.0 • Node ID:\nCSA-COL-091', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 8, height: 1.4)),
-                ],
-              ),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildAppBar() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
-          child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 16),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text('FLOOR OPS', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-              Text('Scanner', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-            ],
-          ),
-        ),
-        Builder(
-          builder: (ctx) => Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-                icon: const Icon(Icons.notifications_none_rounded, color: ink, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
+            Row(children: [
+              Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 18)),
               const SizedBox(width: 12),
+              const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('GATE CONTROL', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)), Text('Scanner', style: TextStyle(color: ink, fontSize: 22, fontWeight: FontWeight.w800))])),
               GestureDetector(
-                onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const AdminProfileScreen())),
-                child: Container(
-                  width: 24,
-                  height: 24,
-                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                  child: const Icon(Icons.person, color: Colors.white, size: 14),
+                onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminProfileScreen())),
+                child: Container(width: 34, height: 34, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person, color: Colors.white, size: 18)),
+              ),
+            ]),
+            const SizedBox(height: 18),
+            _viewport(),
+            const SizedBox(height: 14),
+            Row(children: [
+              Expanded(
+                child: TextField(
+                  controller: _code,
+                  textInputAction: TextInputAction.search,
+                  onSubmitted: (v) => _verify(v),
+                  decoration: InputDecoration(
+                    hintText: 'Booking ref or 4-digit PIN',
+                    prefixIcon: const Icon(Icons.keyboard_alt_outlined),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildGateHeader() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.arrow_back, color: ink, size: 16),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      const Text('Gate Pass Sca', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: const Color(0xFFE5EDFF), borderRadius: BorderRadius.circular(4)),
-                        child: const Text('FASTPASS', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-                      ),
-                    ],
-                  ),
-                  const Text('Turnstile Gate B (South) • CSA Natio...', style: TextStyle(color: muted, fontSize: 10), overflow: TextOverflow.ellipsis),
-                ],
+              const SizedBox(width: 10),
+              FilledButton(
+                onPressed: _busy ? null : () => _verify(_code.text),
+                style: FilledButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16))),
+                child: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)) : const Text('Verify'),
               ),
-            ),
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.flashlight_on_outlined, color: ink, size: 16),
-            ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.cameraswitch_outlined, color: ink, size: 16),
-            ),
+            ]),
+            if (r != null) ...[const SizedBox(height: 18), _resultCard(r)],
+            if (_recent.isNotEmpty) ...[
+              const SizedBox(height: 22),
+              const Text('RECENT SCANS', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 8),
+              for (final s in _recent)
+                ListTile(
+                  contentPadding: EdgeInsets.zero,
+                  dense: true,
+                  onTap: () => setState(() => _result = s),
+                  leading: Icon(s.ok ? Icons.check_circle : Icons.cancel, color: s.ok ? Colors.green : Colors.redAccent),
+                  title: Text(s.booking == null ? s.code : '${s.booking!['booking_ref']} • ${s.booking!['court_name']}', style: const TextStyle(color: ink, fontWeight: FontWeight.w700, fontSize: 13)),
+                  subtitle: Text(s.title, style: const TextStyle(color: muted, fontSize: 11)),
+                ),
+            ],
           ],
         ),
-        const SizedBox(height: 12),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Row(
-              children: const [
-                Icon(Icons.circle, color: AppColors.primary, size: 6),
-                SizedBox(width: 4),
-                Text('Gate 02\nOnline', style: TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w700)),
-              ],
-            ),
-            Row(
-              children: const [
-                Icon(Icons.circle, color: muted, size: 4),
-                SizedBox(width: 4),
-                Text('Ultra-low Latency\n(12ms)', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w600)),
-              ],
-            ),
-            Row(
-              children: const [
-                Icon(Icons.lock_outline, color: AppColors.primary, size: 10),
-                SizedBox(width: 4),
-                Text('Auto-Sync\nActive', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ],
-        ),
-      ],
+      ),
     );
   }
 
-  Widget _buildTabs() {
+  Widget _viewport() {
     return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6), boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 4, offset: Offset(0, 2))]),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.center_focus_strong_outlined, color: AppColors.primary, size: 14),
-                  SizedBox(width: 6),
-                  Text('Optical Viewfinder', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.dialpad, color: muted, size: 14),
-                SizedBox(width: 6),
-                Text('Manual Entry PIN', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScannerViewport() {
-    return Container(
-      height: 300,
-      decoration: BoxDecoration(
-        color: Colors.black,
-        borderRadius: BorderRadius.circular(16),
-        image: const DecorationImage(
-          image: NetworkImage('https://images.unsplash.com/photo-1504450758481-7338eba7524a?q=80&w=600&auto=format&fit=crop'),
-          fit: BoxFit.cover,
-          colorFilter: ColorFilter.mode(Colors.black45, BlendMode.darken),
-        ),
-      ),
-      child: Stack(
-        children: [
-          // Top status bar inside scanner
-          Positioned(
-            top: 12,
-            left: 12,
-            right: 12,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: const [
-                    Icon(Icons.circle, color: AppColors.primary, size: 6),
-                    SizedBox(width: 6),
-                    Text('SCANNING ACTIVE (30 FPS)', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-                const Text('Flash:\nON', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w700)),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  decoration: BoxDecoration(color: const Color(0xFF0D6EFD), borderRadius: BorderRadius.circular(12)),
-                  child: const Text('AUTO-\nDETECT', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-                ),
-              ],
-            ),
-          ),
-          
-          // QR Frame
-          Center(
-            child: Container(
-              width: 160,
-              height: 160,
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.white30, width: 2),
-              ),
-              child: Stack(
-                children: [
-                  // Blue corners
-                  Positioned(top: -2, left: -2, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 4), left: BorderSide(color: AppColors.primary, width: 4))))),
-                  Positioned(top: -2, right: -2, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 4), right: BorderSide(color: AppColors.primary, width: 4))))),
-                  Positioned(bottom: -2, left: -2, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 4), left: BorderSide(color: AppColors.primary, width: 4))))),
-                  Positioned(bottom: -2, right: -2, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 4), right: BorderSide(color: AppColors.primary, width: 4))))),
-                  
-                  // Scanning Laser
-                  Positioned(
-                    top: 80,
-                    left: 0,
-                    right: 0,
-                    child: Container(
-                      height: 2,
-                      decoration: BoxDecoration(
-                        color: AppColors.primary,
-                        boxShadow: [BoxShadow(color: AppColors.primary.withOpacity(0.8), blurRadius: 8, spreadRadius: 2)],
-                      ),
-                    ),
-                  ),
-                  
-                  // Faint QR code icon in center
-                  const Center(child: Icon(Icons.qr_code_2, color: Colors.white54, size: 64)),
-                ],
-              ),
-            ),
-          ),
-          
-          // Bottom instructions
-          Positioned(
-            bottom: 16,
-            left: 0,
-            right: 0,
-            child: Center(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(color: Colors.black54, borderRadius: BorderRadius.circular(20)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.center_focus_strong, color: AppColors.primary, size: 14),
-                    SizedBox(width: 8),
-                    Text('Align dynamic Pass QR inside frame', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildScannerControls() {
-    return Row(
-      children: [
-        Expanded(
-          flex: 2,
-          child: FilledButton.icon(
-            onPressed: () {},
-            icon: const Icon(Icons.play_arrow_rounded, size: 16),
-            label: const Text('Simulate\nScan Match', style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, height: 1.2), textAlign: TextAlign.center),
-            style: FilledButton.styleFrom(
-              backgroundColor: const Color(0xFF0D6EFD),
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            ),
-          ),
-        ),
-        const SizedBox(width: 12),
-        const Expanded(
-          flex: 2,
-          child: Text('Tap to inspect\nsheet', style: TextStyle(color: muted, fontSize: 10, height: 1.2)),
-        ),
-        Expanded(
-          flex: 2,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.end,
-            children: const [
-              Icon(Icons.cell_wifi, color: AppColors.primary, size: 16),
-              SizedBox(width: 4),
-              Text('RFID NFC Tap\nReady', style: TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w800)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildAccessGrantedCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: softBlue),
-        boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
-      ),
-      child: Column(
-        children: [
-          // Header
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(color: Color(0xFFE5EDFF), shape: BoxShape.circle),
-                child: const Icon(Icons.verified, color: AppColors.primary, size: 20),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Text('Access\nGranted', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800, height: 1.2)),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(color: const Color(0xFFE5EDFF), borderRadius: BorderRadius.circular(12)),
-                          child: const Text('VERIFIED', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text('Gate Autoclose in 7s', style: TextStyle(color: muted, fontSize: 10)),
-                  ],
-                ),
-              ),
-              const Text('Turnstile #04\nCleared', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2), textAlign: TextAlign.right),
-            ],
-          ),
-          
-          const SizedBox(height: 16),
-          
-          // Profile
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                Stack(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: const BoxDecoration(
-                        shape: BoxShape.circle,
-                        image: DecorationImage(image: NetworkImage('https://ui-avatars.com/api/?name=Kasun+Perera&background=0D8ABC&color=fff'), fit: BoxFit.cover),
-                      ),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(2),
-                        decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                        child: const Icon(Icons.workspace_premium, color: Colors.white, size: 8),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          const Text('Kasun Perera', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800)),
-                          const Spacer(),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(color: const Color(0xFFE5EDFF), borderRadius: BorderRadius.circular(8)),
-                            child: const Text('Gold Tier', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w700)),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: const [
-                          Text('Booking Ref: ', style: TextStyle(color: muted, fontSize: 10)),
-                          Text('#SB-COL-8941', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w800)),
-                          SizedBox(width: 4),
-                          Icon(Icons.copy, color: AppColors.primary, size: 10),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Court and Slot
-          Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.sports_tennis, color: AppColors.primary, size: 12),
-                          SizedBox(width: 4),
-                          Text('COURT ASSIGN', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('Court 1 (PRO)', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                      const Text('Teak Parquet Floor', style: TextStyle(color: muted, fontSize: 9)),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Icon(Icons.access_time, color: AppColors.primary, size: 12),
-                          SizedBox(width: 4),
-                          Text('SLOT WINDOW', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      const Text('18:00 – 20:00', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                      const Text('Starts in 6 mins', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Squad Access
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('SQUAD ACCESS', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800)),
-                    SizedBox(height: 2),
-                    Text('4 Players (All Paid)', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-                SizedBox(
-                  width: 80,
-                  height: 28,
-                  child: Stack(
-                    children: [
-                      Positioned(right: 48, child: _avatar('A')),
-                      Positioned(right: 24, child: _avatar('B')),
-                      Positioned(right: 0, child: _avatar('C')),
-                      Positioned(
-                        right: -10, // Adjust overlap to fit 4 elements within width
-                        child: Container(
-                          width: 28, height: 28,
-                          decoration: BoxDecoration(color: const Color(0xFF0D6EFD), shape: BoxShape.circle, border: Border.all(color: Colors.white, width: 2)),
-                          child: const Center(child: Text('+1', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800))),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 12),
-          
-          // Lockers
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: const Icon(Icons.door_sliding_outlined, color: AppColors.primary, size: 16),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: const [
-                          Text('Lockers #14 & #15', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                          SizedBox(width: 6),
-                          Icon(Icons.circle, color: AppColors.primary, size: 4),
-                          SizedBox(width: 6),
-                          Text('North Bay', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      const Text('Keyless BLE Auto-paired • Master\nPIN: 6420', style: TextStyle(color: muted, fontSize: 9)),
-                    ],
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                  child: const Icon(Icons.bluetooth, color: muted, size: 14),
-                ),
-              ],
-            ),
-          ),
-          
-          const SizedBox(height: 20),
-          
-          // Action Buttons
-          SizedBox(
-            width: double.infinity,
+      height: 240,
+      decoration: BoxDecoration(color: const Color(0xFF0E1630), borderRadius: BorderRadius.circular(24)),
+      clipBehavior: Clip.antiAlias,
+      child: Stack(fit: StackFit.expand, children: [
+        if (_cameraOn && _camera != null)
+          MobileScanner(
+            controller: _camera!,
+            onDetect: (capture) {
+              final raw = capture.barcodes.isEmpty ? null : capture.barcodes.first.rawValue;
+              if (raw != null) _verify(raw, fromCamera: true);
+            },
+            errorBuilder: (context, error) => Center(child: Padding(padding: const EdgeInsets.all(20), child: Text('Camera unavailable: ${error.errorDetails?.message ?? error.errorCode.name}\nUse the code box below instead.', textAlign: TextAlign.center, style: const TextStyle(color: Colors.white70)))),
+          )
+        else
+          const Center(child: Icon(Icons.qr_code_2_rounded, color: Colors.white24, size: 120)),
+        Center(child: Container(width: 160, height: 160, decoration: BoxDecoration(border: Border.all(color: AppColors.primary, width: 3), borderRadius: BorderRadius.circular(20)))),
+        Positioned(
+          bottom: 12,
+          left: 0,
+          right: 0,
+          child: Center(
             child: FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.lock_open, size: 16),
-              label: const Text('Manual Unlock Turnstile', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D6EFD),
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              ),
+              onPressed: _toggleCamera,
+              icon: Icon(_cameraOn ? Icons.stop_circle_outlined : Icons.photo_camera_outlined, size: 18),
+              label: Text(_cameraOn ? 'Stop camera' : 'Scan with camera'),
+              style: FilledButton.styleFrom(backgroundColor: Colors.white, foregroundColor: ink, shape: const StadiumBorder()),
             ),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: TextButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.warning_amber_rounded, size: 16),
-              label: const Text('Flag Non-Marking Shoes Check', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-              style: TextButton.styleFrom(
-                backgroundColor: const Color(0xFFF3F4F6),
-                foregroundColor: ink,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              ),
-            ),
-          ),
-        ],
-      ),
+        ),
+      ]),
     );
   }
 
-  Widget _avatar(String initial) {
+  Widget _resultCard(_Result r) {
+    final b = r.booking;
+    final color = r.ok ? Colors.green : Colors.redAccent;
     return Container(
-      width: 28,
-      height: 28,
-      decoration: BoxDecoration(
-        color: Colors.grey[300],
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        image: DecorationImage(image: NetworkImage('https://ui-avatars.com/api/?name=$initial&background=random&color=fff'), fit: BoxFit.cover),
-      ),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(22), border: Border.all(color: color.withValues(alpha: 0.5), width: 1.5)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(r.ok ? Icons.verified_rounded : Icons.block_rounded, color: color, size: 30),
+          const SizedBox(width: 10),
+          Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(r.title, style: TextStyle(color: color, fontSize: 18, fontWeight: FontWeight.w800)), Text(r.reason, style: const TextStyle(color: muted, fontSize: 12))])),
+        ]),
+        if (b != null) ...[
+          const Divider(height: 24),
+          _kv('Booking', '${b['booking_ref']}'),
+          _kv('Venue', '${(b['venues'] as Map?)?['name'] ?? ''}'),
+          _kv('Court', '${b['court_name']}'),
+          _kv('Date', '${b['date_schedule']}'),
+          _kv('Time', '${b['time_slot']}'),
+          _kv('Player', (b['guest_name'] as String?)?.isNotEmpty ?? false ? '${b['guest_name']}' : (b['user_id'] == null ? 'Guest' : 'SportsBook member')),
+          _kv('Paid', 'LKR ${b['total_paid']}'),
+          const SizedBox(height: 14),
+          Row(children: [
+            if (r.ok && !r.alreadyIn) Expanded(child: FilledButton.icon(onPressed: () => _checkIn(r), icon: const Icon(Icons.how_to_reg, size: 18), label: const Text('Check in'), style: FilledButton.styleFrom(backgroundColor: Colors.green))),
+            if (r.ok && !r.alreadyIn) const SizedBox(width: 10),
+            Expanded(child: OutlinedButton.icon(onPressed: () => _manualUnlock(r), icon: const Icon(Icons.lock_open, size: 18), label: const Text('Manual unlock'))),
+          ]),
+          const SizedBox(height: 8),
+          SizedBox(width: double.infinity, child: TextButton.icon(onPressed: () => _flagShoes(r), icon: const Icon(Icons.warning_amber_rounded, size: 18), label: const Text('Flag non-marking shoes check'))),
+        ],
+      ]),
     );
   }
+
+  Widget _kv(String k, String v) => Padding(padding: const EdgeInsets.symmetric(vertical: 3), child: Row(children: [SizedBox(width: 80, child: Text(k, style: const TextStyle(color: muted, fontSize: 12))), Expanded(child: Text(v, style: const TextStyle(color: ink, fontWeight: FontWeight.w700, fontSize: 13)))]));
+}
+
+class _Result {
+  const _Result({required this.code, this.booking, required this.ok, this.alreadyIn = false, required this.title, required this.reason});
+
+  final String code;
+  final Map<String, dynamic>? booking;
+  final bool ok;
+  final bool alreadyIn;
+  final String title;
+  final String reason;
 }

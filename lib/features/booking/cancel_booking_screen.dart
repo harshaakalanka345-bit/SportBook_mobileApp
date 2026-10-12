@@ -1,9 +1,57 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
 
-class CancelBookingScreen extends StatelessWidget {
-  const CancelBookingScreen({super.key});
+class CancelBookingScreen extends StatefulWidget {
+  const CancelBookingScreen({super.key, this.booking});
+
+  final Map<String, dynamic>? booking;
+
+  @override
+  State<CancelBookingScreen> createState() => _CancelBookingScreenState();
+}
+
+class _CancelBookingScreenState extends State<CancelBookingScreen> {
+  static const _reasons = [
+    'Change of plans / Schedule conflict',
+    'Teammates / squad unable to attend',
+    'Injury or health issue',
+    'Booking mistake (wrong date / time / court)',
+    'Other reason',
+  ];
+
+  final _service = SupabaseService();
+  int _reason = 0;
+  int _refund = 0;
+  bool _busy = false;
+
+  Future<void> _confirmCancel() async {
+    final ref = widget.booking?['booking_ref'] as String?;
+    if (ref == null) {
+      toast('No booking selected.');
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await _service.cancelBooking(ref);
+      if (_refund == 1) {
+        final paid = (widget.booking?['total_paid'] as num?)?.toDouble() ?? 0;
+        if (paid > 0) {
+          await _service.topUpWallet(paid);
+          await _service.markBookingRefunded(ref, 'wallet');
+        }
+      }
+      if (!mounted) return;
+      toast(_refund == 1 ? 'Booking cancelled. Refund added to your wallet.' : 'Booking cancelled. Refund will reach your card in 2-3 business days.');
+      Navigator.pop(context, true);
+    } catch (e) {
+      if (mounted) toast('Could not cancel: $e');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -111,7 +159,7 @@ class CancelBookingScreen extends StatelessWidget {
                 children: const [
                   Icon(Icons.sports_tennis_rounded, size: 14, color: AppColors.primary),
                   SizedBox(width: 8),
-                  Text('BADMINTON â€¢ INDOOR WOOD\nCOURT', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800, height: 1.2)),
+                  Text('BADMINTON • INDOOR WOOD\nCOURT', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800, height: 1.2)),
                 ],
               ),
               Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(12)), child: const Text('Olympic\nGrade', style: TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w700), textAlign: TextAlign.center)),
@@ -123,9 +171,9 @@ class CancelBookingScreen extends StatelessWidget {
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('CSA National Arena', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
-                  Text('Court 1 â€¢ Teak Flooring', style: TextStyle(color: muted, fontSize: 10)),
+                children: [
+                  Text('${(widget.booking?['venues'] as Map?)?['name'] ?? 'Your booking'}', style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+                  Text('Court 1 • Teak Flooring', style: TextStyle(color: muted, fontSize: 10)),
                 ],
               ),
               Container(width: 40, height: 40, decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.stadium_outlined, color: AppColors.primary)),
@@ -137,10 +185,10 @@ class CancelBookingScreen extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
+                  children: [
                     Text('SCHEDULE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
                     SizedBox(height: 4),
-                    Text('Today, 24 Oct', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
+                    Text('${widget.booking?['date_schedule'] ?? '-'}', style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
                     Text('06:00 - 08:00 PM (2h)', style: TextStyle(color: muted, fontSize: 10)),
                   ],
                 ),
@@ -163,7 +211,7 @@ class CancelBookingScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: const [
               Text('Paid In Full', style: TextStyle(color: muted, fontSize: 11)),
-              Text('Commercial Bank Visa â€¢â€¢â€¢â€¢ 4120', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
+              Text('Commercial Bank Visa •••• 4120', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
             ],
           ),
         ],
@@ -182,7 +230,7 @@ class CancelBookingScreen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _summaryRow('Original Court Fee (2.0 hrs)', 'LKR 5,825'),
+        _summaryRow('Original Court Fee', 'LKR ${widget.booking?['total_paid'] ?? 0}'),
         const SizedBox(height: 12),
         _summaryRow('Cancellation Policy Fee', 'LKR 0 (Free Window)', highlight: true),
         const SizedBox(height: 12),
@@ -198,7 +246,7 @@ class CancelBookingScreen extends StatelessWidget {
                 Text('Direct to original method', style: TextStyle(color: muted, fontSize: 10)),
               ],
             ),
-            const Text('LKR 5,825', style: TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.w800)),
+            Text('LKR ${widget.booking?['total_paid'] ?? 0}', style: const TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.w800)),
           ],
         ),
         const SizedBox(height: 16),
@@ -210,9 +258,9 @@ class CancelBookingScreen extends StatelessWidget {
             children: [
               const Text('SELECT REFUND DESTINATION', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
               const SizedBox(height: 12),
-              _refundRadioOption(true, 'Commercial Bank Visa (â€¢â€¢â€¢â€¢ 4120)', 'Processed in 2-3 business days', Icons.credit_card_outlined),
+              _refundRadioOption(0, 'Commercial Bank Visa (•••• 4120)', 'Processed in 2-3 business days', Icons.credit_card_outlined),
               const SizedBox(height: 12),
-              _refundRadioOption(false, 'SportsBook Wallet Credit', 'Instant balance availability', Icons.account_balance_wallet_outlined),
+              _refundRadioOption(1, 'SportsBook Wallet Credit', 'Instant balance availability', Icons.account_balance_wallet_outlined),
             ],
           ),
         ),
@@ -230,8 +278,12 @@ class CancelBookingScreen extends StatelessWidget {
     );
   }
 
-  Widget _refundRadioOption(bool selected, String title, String subtitle, IconData icon) {
-    return Container(
+  Widget _refundRadioOption(int index, String title, String subtitle, IconData icon) {
+    final selected = _refund == index;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => setState(() => _refund = index),
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: selected ? AppColors.primary : const Color(0xFFE9EEFF))),
       child: Row(
@@ -250,7 +302,7 @@ class CancelBookingScreen extends StatelessWidget {
           Icon(icon, color: muted, size: 16),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildReasonForCancellation() {
@@ -260,21 +312,25 @@ class CancelBookingScreen extends StatelessWidget {
         const Text('Reason for Cancellation', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
         const Text('Help us improve facility availability (Select one)', style: TextStyle(color: muted, fontSize: 10)),
         const SizedBox(height: 16),
-        _reasonRadio(true, 'Change of plans / Schedule conflict'),
+        _reasonRadio(0, 'Change of plans / Schedule conflict'),
         const SizedBox(height: 8),
-        _reasonRadio(false, 'Teammates / squad unable to attend'),
+        _reasonRadio(1, 'Teammates / squad unable to attend'),
         const SizedBox(height: 8),
-        _reasonRadio(false, 'Injury or health issue'),
+        _reasonRadio(2, 'Injury or health issue'),
         const SizedBox(height: 8),
-        _reasonRadio(false, 'Booking mistake (wrong date / time /\ncourt)'),
+        _reasonRadio(3, 'Booking mistake (wrong date / time /\ncourt)'),
         const SizedBox(height: 8),
-        _reasonRadio(false, 'Other reason'),
+        _reasonRadio(4, 'Other reason'),
       ],
     );
   }
 
-  Widget _reasonRadio(bool selected, String text) {
-    return Container(
+  Widget _reasonRadio(int index, String text) {
+    final selected = _reason == index;
+    return InkWell(
+      borderRadius: BorderRadius.circular(12),
+      onTap: () => setState(() => _reason = index),
+      child: Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
       decoration: BoxDecoration(color: selected ? AppColors.primary : const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
       child: Row(
@@ -284,7 +340,7 @@ class CancelBookingScreen extends StatelessWidget {
           Expanded(child: Text(text, style: TextStyle(color: selected ? Colors.white : ink, fontSize: 11, fontWeight: FontWeight.w600))),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildAccessRevocationNotice() {
@@ -304,10 +360,10 @@ class CancelBookingScreen extends StatelessWidget {
           const SizedBox(height: 16),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Icon(Icons.qr_code_2_rounded, size: 14, color: muted),
               SizedBox(width: 8),
-              Expanded(child: Text('Digital turnstile gate pass #SB-COL-2024-\n8941 will be revoked immediately and locker\npairings cleared.', style: TextStyle(color: muted, fontSize: 10, height: 1.4))),
+              Expanded(child: Text('Digital turnstile gate pass #${widget.booking?['booking_ref'] ?? ''} will be revoked immediately and locker\npairings cleared.', style: TextStyle(color: muted, fontSize: 10, height: 1.4))),
             ],
           ),
           const SizedBox(height: 12),
@@ -330,7 +386,7 @@ class CancelBookingScreen extends StatelessWidget {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () => Navigator.pop(context),
+            onPressed: _busy ? null : _confirmCancel,
             icon: const Icon(Icons.event_busy, size: 16),
             label: const Text('Confirm & Cancel Booking', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             style: FilledButton.styleFrom(
@@ -367,7 +423,7 @@ class CancelBookingScreen extends StatelessWidget {
       children: const [
         Text('Official Partner of Colombo Sports Authority', style: TextStyle(color: muted, fontSize: 10)),
         SizedBox(height: 4),
-        Text('SPORTSBOOK OS â€¢ V2.4.0', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
+        Text('SPORTSBOOK OS • V2.4.0', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
       ],
     );
   }

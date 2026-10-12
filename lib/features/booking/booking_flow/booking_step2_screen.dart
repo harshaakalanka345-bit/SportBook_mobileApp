@@ -2,10 +2,46 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/booking_draft.dart';
 import 'booking_step3_screen.dart';
 
-class BookingStep2Screen extends StatelessWidget {
+class BookingStep2Screen extends StatefulWidget {
   const BookingStep2Screen({super.key});
+
+  @override
+  State<BookingStep2Screen> createState() => _BookingStep2ScreenState();
+}
+
+class _BookingStep2ScreenState extends State<BookingStep2Screen> {
+  double get _courtFee => BookingDraft.courtFee;
+  int _rackets = 2;
+  int _shuttles = 1;
+  bool _shoes = false;
+  bool _split = true;
+  bool _promo = true;
+
+  double get _gear => _rackets * 300.0 + _shuttles * 450.0 + (_shoes ? 250 : 0);
+  double get _subtotal => _courtFee + _gear;
+  double get _discount => _promo ? 500 : 0;
+  double get _tax => (_subtotal - _discount) * 0.05;
+  double get _total => _subtotal - _discount + _tax;
+  double get _share => _split ? _total / 4 : _total;
+
+  String _money(double v) {
+    final s = v.toStringAsFixed(2);
+    final parts = s.split('.');
+    final whole = parts[0].replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+    return '$whole.${parts[1]}';
+  }
+
+  String get _gearLabel {
+    final items = <String>[
+      if (_rackets > 0) '$_rackets Racket${_rackets > 1 ? 's' : ''}',
+      if (_shuttles > 0) '$_shuttles Shuttle${_shuttles > 1 ? 's' : ''}',
+      if (_shoes) '1 Shoes',
+    ];
+    return items.isEmpty ? 'No gear selected' : items.join(' + ');
+  }
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -25,7 +61,7 @@ class BookingStep2Screen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Text('SPORTSBOOK â€¢ BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+            Text('SPORTSBOOK • BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
             Text('Booking Checkout', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
           ],
         ),
@@ -74,7 +110,7 @@ class BookingStep2Screen extends StatelessWidget {
       child: Row(
         children: [
           const Text('STEP 2 OF 4', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
-          const Text(' â€¢ Review & Add-ons', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)),
+          const Text(' • Review & Add-ons', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)),
           const Spacer(),
           Container(width: 16, height: 4, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(2))),
           const SizedBox(width: 4),
@@ -99,20 +135,24 @@ class BookingStep2Screen extends StatelessWidget {
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                 decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(6)),
-                child: const Text('BADMINTON', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
+                child: Text(BookingDraft.sport.toUpperCase(), style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
               ),
               const SizedBox(width: 8),
-              const Text('Court 1 â€¢ Indoor\nWooden Parquet', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2)),
+              Text('${BookingDraft.courtName} •\n${BookingDraft.courtType}', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w600, height: 1.2)),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
-                child: Row(
-                  children: const [
-                    Icon(Icons.edit_outlined, size: 12, color: AppColors.primary),
-                    SizedBox(width: 4),
-                    Text('Edit', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-                  ],
+              InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: () => Navigator.pop(context),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
+                  child: Row(
+                    children: const [
+                      Icon(Icons.edit_outlined, size: 12, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text('Edit', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ],
+                  ),
                 ),
               ),
             ],
@@ -129,13 +169,13 @@ class BookingStep2Screen extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('CSA National Arena', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text(BookingDraft.venueName, style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
                     const SizedBox(height: 4),
                     Row(
-                      children: const [
-                        Icon(Icons.location_on_outlined, size: 12, color: AppColors.primary),
-                        SizedBox(width: 4),
-                        Text('Maitland Place, Colombo 07', style: TextStyle(color: muted, fontSize: 10)),
+                      children: [
+                        const Icon(Icons.location_on_outlined, size: 12, color: AppColors.primary),
+                        const SizedBox(width: 4),
+                        Expanded(child: Text(BookingDraft.venueArea, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 10))),
                       ],
                     ),
                   ],
@@ -154,17 +194,17 @@ class BookingStep2Screen extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('MATCH SCHEDULE', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800)),
-                      SizedBox(height: 2),
-                      Text('Thu, 24 Oct â€¢ 06:00 PM - 08:00 PM', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
+                    children: [
+                      const Text('MATCH SCHEDULE', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text('${BookingDraft.dateLabel} • ${BookingDraft.timeRange}', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                   decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(20)),
-                  child: const Text('2\nHours', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
+                  child: Text('${BookingDraft.hours == BookingDraft.hours.roundToDouble() ? BookingDraft.hours.round() : BookingDraft.hours}\nHours', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
                 ),
               ],
             ),
@@ -191,11 +231,11 @@ class BookingStep2Screen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        _gearItem(Icons.search_rounded, 'Yonex Astrox 88D Pro', 'LKR 300 / racket', 2),
+        _gearItem(Icons.search_rounded, 'Yonex Astrox 88D Pro', 'LKR 300 / racket', _rackets, (v) => setState(() => _rackets = v)),
         const SizedBox(height: 12),
-        _gearItem(Icons.sports_baseball_outlined, 'Feather Shuttles (Tube)', 'LKR 450 / tube', 1),
+        _gearItem(Icons.sports_baseball_outlined, 'Feather Shuttles (Tube)', 'LKR 450 / tube', _shuttles, (v) => setState(() => _shuttles = v)),
         const SizedBox(height: 12),
-        _gearItemAdd(Icons.do_not_step_rounded, 'Non-marking Court Shoes', 'Size 42 â€¢ LKR 250'),
+        _gearItemAdd(Icons.do_not_step_rounded, 'Non-marking Court Shoes', 'Size 42 • LKR 250', _shoes, () => setState(() => _shoes = !_shoes)),
         const SizedBox(height: 12),
         Container(
           padding: const EdgeInsets.all(16),
@@ -225,7 +265,7 @@ class BookingStep2Screen extends StatelessWidget {
     );
   }
 
-  Widget _gearItem(IconData icon, String title, String price, int count) {
+  Widget _gearItem(IconData icon, String title, String price, int count, ValueChanged<int> onChanged) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
@@ -251,12 +291,12 @@ class BookingStep2Screen extends StatelessWidget {
             decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
             child: Row(
               children: [
-                IconButton(icon: const Icon(Icons.remove, size: 14), constraints: const BoxConstraints(), padding: const EdgeInsets.all(8), onPressed: () {}),
+                IconButton(icon: const Icon(Icons.remove, size: 14), constraints: const BoxConstraints(), padding: const EdgeInsets.all(8), onPressed: count > 0 ? () => onChanged(count - 1) : null),
                 Text('$count', style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)),
                 Container(
                   decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
                   margin: const EdgeInsets.all(4),
-                  child: IconButton(icon: const Icon(Icons.add, size: 14, color: Colors.white), constraints: const BoxConstraints(), padding: const EdgeInsets.all(4), onPressed: () {}),
+                  child: IconButton(icon: const Icon(Icons.add, size: 14, color: Colors.white), constraints: const BoxConstraints(), padding: const EdgeInsets.all(4), onPressed: count < 10 ? () => onChanged(count + 1) : null),
                 ),
               ],
             ),
@@ -266,7 +306,7 @@ class BookingStep2Screen extends StatelessWidget {
     );
   }
 
-  Widget _gearItemAdd(IconData icon, String title, String subtitle) {
+  Widget _gearItemAdd(IconData icon, String title, String subtitle, bool added, VoidCallback onTap) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
@@ -283,15 +323,19 @@ class BookingStep2Screen extends StatelessWidget {
               ],
             ),
           ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
-            child: Row(
-              children: const [
-                Icon(Icons.add, size: 14, color: AppColors.primary),
-                SizedBox(width: 4),
-                Text('Add', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-              ],
+          InkWell(
+            borderRadius: BorderRadius.circular(16),
+            onTap: onTap,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(color: added ? AppColors.primary : softBlue, borderRadius: BorderRadius.circular(16)),
+              child: Row(
+                children: [
+                  Icon(added ? Icons.check_rounded : Icons.add, size: 14, color: added ? Colors.white : AppColors.primary),
+                  const SizedBox(width: 4),
+                  Text(added ? 'Added' : 'Add', style: TextStyle(color: added ? Colors.white : AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                ],
+              ),
             ),
           ),
         ],
@@ -300,6 +344,7 @@ class BookingStep2Screen extends StatelessWidget {
   }
 
   Widget _buildSplitWithFriends() {
+    final share = 'LKR ${_money(_total / 4)}';
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
@@ -312,32 +357,34 @@ class BookingStep2Screen extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Split with Friends', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
-                    Text('Splitting between 4 players', style: TextStyle(color: muted, fontSize: 10)),
+                  children: [
+                    const Text('Split with Friends', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
+                    Text(_split ? 'Splitting between 4 players' : 'Paying the full amount yourself', style: const TextStyle(color: muted, fontSize: 10)),
                   ],
                 ),
               ),
-              CupertinoSwitch(value: true, activeColor: AppColors.primary, onChanged: (_) {}),
+              CupertinoSwitch(value: _split, activeColor: AppColors.primary, onChanged: (v) => setState(() => _split = v)),
             ],
           ),
-          const SizedBox(height: 16),
-          _friendRow('Kasun', 'Paying now via card', 'LKR 1,512.50', isHost: true),
-          _friendRow('Dimuth K.', 'Invited via WhatsApp', 'LKR 1,437.50'),
-          _friendRow('Sahan P.', 'Invited via SMS', 'LKR 1,437.50', initials: 'SP'),
-          _friendRow('Nuwan R.', 'Invited via Link', 'LKR 1,437.50', initials: 'NR'),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              children: const [
-                Icon(Icons.mobile_screen_share_rounded, size: 16, color: AppColors.primary),
-                SizedBox(width: 12),
-                Expanded(child: Text('Payment links sent instantly to WhatsApp & SMS once confirmed.', style: TextStyle(color: muted, fontSize: 10))),
-              ],
+          if (_split) ...[
+            const SizedBox(height: 16),
+            _friendRow('Kasun', 'Paying now via card', share, isHost: true),
+            _friendRow('Dimuth K.', 'Invited via WhatsApp', share),
+            _friendRow('Sahan P.', 'Invited via SMS', share, initials: 'SP'),
+            _friendRow('Nuwan R.', 'Invited via Link', share, initials: 'NR'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(12)),
+              child: Row(
+                children: const [
+                  Icon(Icons.mobile_screen_share_rounded, size: 16, color: AppColors.primary),
+                  SizedBox(width: 12),
+                  Expanded(child: Text('Payment links sent instantly to WhatsApp & SMS once confirmed.', style: TextStyle(color: muted, fontSize: 10))),
+                ],
+              ),
             ),
-          ),
+          ],
         ],
       ),
     );
@@ -386,33 +433,37 @@ class BookingStep2Screen extends StatelessWidget {
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('Voucher & Club Credits', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-            Text('1 Applied', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+          children: [
+            const Text('Voucher & Club Credits', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
+            Text(_promo ? '1 Applied' : 'None applied', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
           ],
         ),
         const SizedBox(height: 12),
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          padding: EdgeInsets.symmetric(horizontal: 16, vertical: _promo ? 12 : 8),
           decoration: BoxDecoration(color: const Color(0xFFF4F7FF), borderRadius: BorderRadius.circular(16)),
           child: Row(
-            children: const [
-              Icon(Icons.local_activity_outlined, size: 16, color: AppColors.primary),
-              SizedBox(width: 8),
-              Text('COURTCONNECT', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-              Spacer(),
-              Icon(Icons.close_rounded, size: 16, color: muted),
+            children: [
+              const Icon(Icons.local_activity_outlined, size: 16, color: AppColors.primary),
+              const SizedBox(width: 8),
+              const Text('COURTCONNECT', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
+              const Spacer(),
+              _promo
+                  ? InkWell(onTap: () => setState(() => _promo = false), child: const Padding(padding: EdgeInsets.all(4), child: Icon(Icons.close_rounded, size: 16, color: muted)))
+                  : TextButton(onPressed: () => setState(() => _promo = true), child: const Text('Apply')),
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        Row(
-          children: const [
-            Icon(Icons.check_circle_rounded, size: 12, color: AppColors.primary),
-            SizedBox(width: 4),
-            Text('-LKR 500 PROMO DISCOUNT APPLIED!', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-          ],
-        ),
+        if (_promo) ...[
+          const SizedBox(height: 8),
+          Row(
+            children: const [
+              Icon(Icons.check_circle_rounded, size: 12, color: AppColors.primary),
+              SizedBox(width: 4),
+              Text('-LKR 500 PROMO DISCOUNT APPLIED!', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+            ],
+          ),
+        ],
       ],
     );
   }
@@ -431,33 +482,33 @@ class BookingStep2Screen extends StatelessWidget {
             ],
           ),
           const SizedBox(height: 20),
-          _summaryRow('Court Rental (2 hrs @ LKR 2,500/hr)', 'LKR\n5,000.00'),
+          _summaryRow('Court Rental (${BookingDraft.courtName}, ${BookingDraft.hours == BookingDraft.hours.roundToDouble() ? BookingDraft.hours.round() : BookingDraft.hours} hrs)', 'LKR\n${_money(_courtFee)}'),
           const SizedBox(height: 12),
-          _summaryRow('Gear Rentals (2 Rackets + 1 Shuttles)', 'LKR\n1,050.00'),
+          _summaryRow('Gear Rentals ($_gearLabel)', 'LKR\n${_money(_gear)}'),
           const SizedBox(height: 12),
           _summaryRow('Arena Floodlights & Changing Access', 'Included', isIncluded: true),
           const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: Color(0xFFE9EEFF), height: 1)),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('Subtotal', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
-              Text('LKR 6,050.00', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
+            children: [
+              const Text('Subtotal', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text('LKR ${_money(_subtotal)}', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('Promo Discount\n(COURTCONNECT)', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
-              Text('- LKR\n500.00', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800), textAlign: TextAlign.right),
+            children: [
+              const Text('Promo Discount\n(COURTCONNECT)', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text('- LKR\n${_money(_discount)}', style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800), textAlign: TextAlign.right),
             ],
           ),
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Text('City Sports Facility Tax (5%)', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-              Text('LKR 275.00', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
+            children: [
+              const Text('City Sports Facility Tax (5%)', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
+              Text('LKR ${_money(_tax)}', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
             ],
           ),
           const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: Color(0xFFE9EEFF), height: 1)),
@@ -466,16 +517,16 @@ class BookingStep2Screen extends StatelessWidget {
             children: [
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: const [
-                  Text('TOTAL MATCH AMOUNT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                  Text('LKR 5,825.00', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+                children: [
+                  const Text('TOTAL MATCH AMOUNT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
+                  Text('LKR ${_money(_total)}', style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
                 ],
               ),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.end,
-                children: const [
-                  Text('YOUR SHARE (HOST)', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                  Text('LKR 1,512.50', style: TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w800)),
+                children: [
+                  Text(_split ? 'YOUR SHARE (HOST)' : 'YOU PAY', style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+                  Text('LKR ${_money(_share)}', style: const TextStyle(color: AppColors.primary, fontSize: 18, fontWeight: FontWeight.w800)),
                 ],
               ),
             ],
@@ -542,8 +593,8 @@ class BookingStep2Screen extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 2),
-                const Text('LKR 1,512.50', style: TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.w800)),
-                const Text('Full Total: LKR 5,825.00', style: TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w600)),
+                Text('LKR ${_money(_share)}', style: const TextStyle(color: AppColors.primary, fontSize: 20, fontWeight: FontWeight.w800)),
+                Text('Full Total: LKR ${_money(_total)}', style: const TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -551,6 +602,7 @@ class BookingStep2Screen extends StatelessWidget {
           Expanded(
             child: FilledButton(
               onPressed: () {
+                BookingDraft.setCheckout(gearFee: _gear, discount: _discount, tax: _tax, total: _total, share: _share, gearLabel: _gearLabel);
                 Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep3Screen()));
               },
               style: FilledButton.styleFrom(

@@ -46,7 +46,7 @@ class _AdminMainWrapperState extends State<AdminMainWrapper> {
           NavigationDestination(
             icon: Icon(Icons.calendar_month_outlined),
             selectedIcon: Icon(Icons.calendar_month_rounded),
-            label: 'Schedule',
+            label: 'Bookings',
           ),
           NavigationDestination(
             icon: Icon(Icons.warning_amber_outlined),

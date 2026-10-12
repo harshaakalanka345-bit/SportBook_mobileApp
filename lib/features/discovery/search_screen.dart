@@ -1,55 +1,134 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
-import 'filter_screen.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
+import '../../core/venue_filters.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
+import 'filter_screen.dart';
+import 'venue_detail_screen.dart';
 
-class SearchScreen extends StatelessWidget {
+/// Search tab: free-text search plus filters over the live venue list.
+class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
 
+  @override
+  State<SearchScreen> createState() => _SearchScreenState();
+}
+
+class _SearchScreenState extends State<SearchScreen> {
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
   static const softBlue = Color(0xFFF0F2FF);
 
+  final _service = SupabaseService();
+  final _query = TextEditingController();
+  List<Map<String, dynamic>> _venues = [];
+  VenueFilters _filters = const VenueFilters();
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void dispose() {
+    _query.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final v = await _service.getVenues();
+      if (mounted) setState(() => _venues = v);
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  List<Map<String, dynamic>> get _results => _venues.where((v) => _filters.matches(v, _query.text)).toList();
+
+  Future<void> _openFilters() async {
+    final result = await Navigator.push<VenueFilters>(
+      context,
+      MaterialPageRoute(builder: (_) => FilterScreen(venues: _venues, initial: _filters)),
+    );
+    if (result != null) setState(() => _filters = result);
+  }
+
+  Future<void> _notifyMe() async {
+    final sport = _filters.sport ?? 'Any sport';
+    final area = _filters.area ?? 'Any area';
+    try {
+      await _service.addSlotAlert(sport: sport, area: area);
+      toast('Alert saved: $sport in $area. (Notifications are not delivered yet.)');
+    } catch (e) {
+      toast('Could not create the alert: $e');
+    }
+  }
+
+  List<(String, VoidCallback)> get _chips => [
+        if (_filters.sport != null) (_filters.sport!, () => setState(() => _filters = _filters.copyWith(sport: null))),
+        if (_filters.environment != null) (_filters.environment!, () => setState(() => _filters = _filters.copyWith(environment: null))),
+        if (_filters.area != null) (_filters.area!, () => setState(() => _filters = _filters.copyWith(area: null))),
+        if (_filters.minRate > 0 || _filters.maxRate < VenueFilters.rateCeiling)
+          (
+            'LKR ${_filters.minRate.round()}-${_filters.maxRate >= VenueFilters.rateCeiling ? '${VenueFilters.rateCeiling.round()}+' : _filters.maxRate.round()}',
+            () => setState(() => _filters = _filters.copyWith(minRate: 0, maxRate: VenueFilters.rateCeiling)),
+          ),
+        for (final a in _filters.amenities) (a, () => setState(() => _filters = _filters.copyWith(amenities: {..._filters.amenities}..remove(a)))),
+      ];
+
   @override
   Widget build(BuildContext context) {
+    final results = _results;
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8FF),
       appBar: AppBar(
         backgroundColor: const Color(0xFFFAF8FF),
         elevation: 0,
         titleSpacing: 20,
-        title: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
-              child: const Icon(Icons.search, color: Colors.white, size: 16),
-            ),
-            const SizedBox(width: 12),
-            const Text('Search', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
-          ],
-        ),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.tune_rounded, color: ink),
-            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (context) => const FilterScreen())),
+        title: Row(children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
+            child: const Icon(Icons.search, color: Colors.white, size: 16),
           ),
-          Stack(
-            alignment: Alignment.topRight,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_rounded, color: ink),
-                onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
+          const SizedBox(width: 12),
+          const Text('Search', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+        ]),
+        actions: [
+          Stack(alignment: Alignment.topRight, children: [
+            IconButton(icon: const Icon(Icons.tune_rounded, color: ink), onPressed: _venues.isEmpty ? null : _openFilters),
+            if (_filters.activeCount > 0)
+              Positioned(
+                top: 6,
+                right: 6,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
+                  child: Text('${_filters.activeCount}', style: const TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w800)),
+                ),
               ),
-              Positioned(top: 12, right: 12, child: Container(width: 6, height: 6, decoration: const BoxDecoration(color: Colors.redAccent, shape: BoxShape.circle))),
-            ],
+          ]),
+          IconButton(
+            icon: const Icon(Icons.notifications_none_rounded, color: ink),
+            onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
           ),
           GestureDetector(
             onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen())),
             child: Container(
-              margin: const EdgeInsets.only(right: 20),
+              margin: const EdgeInsets.only(right: 20, left: 4),
               padding: const EdgeInsets.all(6),
               decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
               child: const Icon(Icons.person_outline, color: Colors.white, size: 16),
@@ -57,476 +136,124 @@ class SearchScreen extends StatelessWidget {
           ),
         ],
       ),
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
-        children: [
-          _buildHeader(context),
-          const SizedBox(height: 16),
-          _buildTabs(),
-          const SizedBox(height: 16),
-          _buildAppliedCriteria(),
-          const SizedBox(height: 20),
-          _buildRadarCard(),
-          const SizedBox(height: 24),
-          _buildConstructiveRecovery(),
-          const SizedBox(height: 24),
-          _buildNearbyArenas(),
-          const SizedBox(height: 32),
-          _buildFooter(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildHeader(BuildContext context) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          onTap: () {
-            // Push to the new Filter Screen (the old Search UI)
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const FilterScreen()));
-          },
-          child: Container(
-            padding: const EdgeInsets.all(8),
-            decoration: const BoxDecoration(color: softBlue, shape: BoxShape.circle),
-            child: const Icon(Icons.arrow_back, color: ink, size: 18),
-          ),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text('EDGE-CASE RECOVERY UI', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-              Text('Search & Activity\nStatus', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800, height: 1.2)),
-            ],
-          ),
-        ),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-          decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-          child: Row(
-            children: const [
-              Icon(Icons.circle, color: AppColors.primary, size: 6),
-              SizedBox(width: 4),
-              Text('Interactive', style: TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTabs() {
-    return Container(
-      padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(24)),
-      child: Row(
-        children: [
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              decoration: BoxDecoration(color: const Color(0xFF0D6EFD), borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.search_off_rounded, color: Colors.white, size: 14),
-                  SizedBox(width: 4),
-                  Text('No Courts', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-                ],
-              ),
-            ),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.calendar_today_outlined, color: muted, size: 14),
-                SizedBox(width: 4),
-                Text('Bookings', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-          Expanded(
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.wifi_off_rounded, color: muted, size: 14),
-                SizedBox(width: 4),
-                Text('Offline', style: TextStyle(color: muted, fontSize: 11, fontWeight: FontWeight.w600)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAppliedCriteria() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
-              Row(
-                children: [
-                  Icon(Icons.tune, color: muted, size: 12),
-                  SizedBox(width: 6),
-                  Text('APPLIED CRITERIA', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                ],
-              ),
-              Text('Clear All Filters', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _filterChip('Badminton', Icons.person_outline),
-              _filterChip('Colombo 07', Icons.location_on_outlined),
-              _filterChip('After 22:00', Icons.access_time),
-              _filterChip('< 1.0 km', Icons.radar_outlined),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _filterChip(String label, IconData icon) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: AppColors.primary, size: 12),
-          const SizedBox(width: 4),
-          Text(label, style: const TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w600)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRadarCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: const [BoxShadow(color: Color(0x0A000000), blurRadius: 20, offset: Offset(0, 10))],
-      ),
-      child: Column(
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              Container(width: 120, height: 120, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: softBlue, width: 1))),
-              Container(width: 80, height: 80, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: softBlue, width: 1))),
-              Container(width: 40, height: 40, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: softBlue, width: 1))),
-              const Icon(Icons.linear_scale, color: AppColors.primary, size: 32),
-              Positioned(
-                top: 10,
-                right: 20,
-                child: Column(
-                  children: [
-                    Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: ink, borderRadius: BorderRadius.all(Radius.circular(4))), child: const Text('FUL', style: TextStyle(color: Colors.white, fontSize: 6))),
-                    const Icon(Icons.circle, color: Colors.redAccent, size: 8),
-                  ],
-                ),
-              ),
-              Positioned(
-                bottom: 20,
-                left: 10,
-                child: Column(
-                  children: [
-                    Container(padding: const EdgeInsets.all(2), decoration: const BoxDecoration(color: ink, borderRadius: BorderRadius.all(Radius.circular(4))), child: const Text('FUL', style: TextStyle(color: Colors.white, fontSize: 6))),
-                    const Icon(Icons.circle, color: Colors.redAccent, size: 8),
-                  ],
-                ),
-              ),
-              Positioned(
-                bottom: 0,
-                right: 10,
-                child: Container(
-                  padding: const EdgeInsets.all(4),
-                  decoration: const BoxDecoration(color: Color(0xFFDC2626), shape: BoxShape.circle),
-                  child: const Icon(Icons.block, color: Colors.white, size: 16),
-                ),
-              )
-            ],
-          ),
-          const SizedBox(height: 20),
-          const Text('No Courts in Colombo 07', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 8),
-          const Text(
-            'We couldn\'t find any open badminton slots\nmatching your exact filter (22:00-24:00,\n<1km). Night shifts at Sugathadasa &\nTorrington are locked.',
-            style: TextStyle(color: muted, fontSize: 11, height: 1.4),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.arrow_forward, size: 16),
-              label: const Text('Reset Filters & Show All Courts', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF0D6EFD),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildConstructiveRecovery() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('Constructive Recovery', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
-            Text('3 SMART OPTIONS', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _buildRecoveryCard(
-          icon: Icons.track_changes_outlined,
-          title: 'Broaden Radius to 5.0 km',
-          badge: '6 Open',
-          desc: 'CSA Badminton Arena & Royal Sports\nComplex have premium synthetic courts...',
-          actionWidget: SizedBox(
-            width: double.infinity,
-            child: FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.location_on_outlined, size: 14),
-              label: const Text('Quick Apply (5km Radius)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF3B82F6),
-                foregroundColor: Colors.white,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildRecoveryCard(
-          icon: Icons.notifications_active_outlined,
-          title: 'Notify on Cancellation',
-          badge: 'Avg 8 min ping',
-          desc: 'Activate an immediate WhatsApp & Push\nping if another player reschedules their\nColombo 07 slot tonight.',
-          actionWidget: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: const [
-                  Icon(Icons.chat_bubble_outline, color: AppColors.primary, size: 12),
-                  SizedBox(width: 4),
-                  Text('Send to +94 77 **** 924', style: TextStyle(color: muted, fontSize: 10)),
-                ],
-              ),
-              FilledButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.notifications_active_outlined, size: 12, color: ink),
-                label: const Text('Notify Me', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700)),
-                style: FilledButton.styleFrom(
-                  backgroundColor: softBlue,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                  minimumSize: const Size(0, 32),
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 12),
-        _buildRecoveryCard(
-          icon: Icons.search_rounded,
-          title: 'Alternate Sports Available',
-          badge: 'Tonight',
-          desc: 'Squash and Tennis courts within Colombo\n07 are unreserved at 21:30 and 22:15.',
-          actionWidget: Row(
-            children: [
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Squash (2 slots)', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(20)),
-                  child: const Text('Tennis (4 slots)', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700), textAlign: TextAlign.center),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecoveryCard({required IconData icon, required String title, required String badge, required String desc, required Widget actionWidget}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: const BoxDecoration(color: softBlue, shape: BoxShape.circle),
-                child: Icon(icon, color: ink, size: 16),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(title, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-                          child: Text(badge, style: const TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w700)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(desc, style: const TextStyle(color: muted, fontSize: 9, height: 1.4)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          actionWidget,
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNearbyArenas() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: const [
-            Text('Verified Nearby Arenas', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
-            Text('Available Tomorrow', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Row(
+      body: RefreshIndicator(
+        onRefresh: _load,
+        child: ListView(
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 32),
           children: [
-            Expanded(child: _arenaCard('Torrington Indoor', 'From LKR 1,800/hr', '1.8 km')),
-            const SizedBox(width: 12),
-            Expanded(child: _arenaCard('Royal Sports Arena', 'From LKR 2,400/hr', '2.4 km')),
-          ],
-        ),
-      ],
-    );
-  }
-
-  Widget _arenaCard(String title, String price, String distance) {
-    return Container(
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFF1F5F9)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            children: [
-              Container(
-                height: 80,
-                decoration: const BoxDecoration(
-                  color: softBlue,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                ),
-                child: const Center(child: Icon(Icons.image_outlined, color: muted, size: 24)),
+            TextField(
+              controller: _query,
+              onChanged: (_) => setState(() {}),
+              textInputAction: TextInputAction.search,
+              decoration: InputDecoration(
+                hintText: 'Search courts, areas or sports…',
+                prefixIcon: const Icon(Icons.search_rounded, color: muted),
+                suffixIcon: _query.text.isEmpty ? null : IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(_query.clear)),
+                filled: true,
+                fillColor: Colors.white,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
               ),
-              Positioned(
-                top: 8,
-                left: 8,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                  child: Text(distance, style: const TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w700)),
-                ),
+            ),
+            if (_chips.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+                    const Text('APPLIED FILTERS', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
+                    GestureDetector(
+                      onTap: () => setState(() => _filters = const VenueFilters()),
+                      child: const Text('Clear all', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+                    ),
+                  ]),
+                  const SizedBox(height: 8),
+                  Wrap(spacing: 8, runSpacing: 8, children: [
+                    for (final c in _chips) InputChip(label: Text(c.$1, style: const TextStyle(fontSize: 11)), onDeleted: c.$2, backgroundColor: Colors.white, side: BorderSide.none),
+                  ]),
+                ]),
               ),
             ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 2),
-                Text(price, style: const TextStyle(color: muted, fontSize: 9)),
-                const SizedBox(height: 12),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: const [
-                    Row(
-                      children: [
-                        Icon(Icons.bolt, color: AppColors.primary, size: 12),
-                        Text('Instant', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                      ],
+            const SizedBox(height: 16),
+            if (_loading)
+              const Padding(padding: EdgeInsets.only(top: 60), child: Center(child: CircularProgressIndicator()))
+            else if (_error != null)
+              _message(Icons.cloud_off, 'Could not load courts', _error!, [FilledButton(onPressed: _load, child: const Text('Retry'))])
+            else if (results.isEmpty)
+              _message(
+                Icons.search_off_rounded,
+                'No courts match',
+                _venues.isEmpty ? 'There are no registered courts yet.' : 'Nothing matches your search and filters. Try widening them, or get an alert when a matching court is listed.',
+                [
+                  if (!_filters.isEmpty || _query.text.isNotEmpty)
+                    FilledButton.icon(
+                      onPressed: () => setState(() {
+                        _filters = const VenueFilters();
+                        _query.clear();
+                      }),
+                      icon: const Icon(Icons.restart_alt_rounded, size: 18),
+                      label: const Text('Reset search & filters'),
                     ),
-                    Icon(Icons.arrow_forward, color: muted, size: 12),
-                  ],
-                )
-              ],
-            ),
-          ),
-        ],
+                  OutlinedButton.icon(onPressed: _notifyMe, icon: const Icon(Icons.notifications_active_outlined, size: 18), label: const Text('Notify me')),
+                ],
+              )
+            else ...[
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text('${results.length} ${results.length == 1 ? 'court' : 'courts'} found', style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+              ),
+              for (final v in results) _venueCard(v),
+            ],
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildFooter() {
-    return Column(
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.verified_user_outlined, color: AppColors.primary, size: 12),
-            SizedBox(width: 4),
-            Text('OFFICIAL PARTNER OF COLOMBO SPORTS AUTHORITY', style: TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w800)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        const Text('SportsBook OS v2.4.0 â€¢ High Reliability Network', style: TextStyle(color: muted, fontSize: 8)),
-      ],
+  Widget _message(IconData icon, String title, String body, List<Widget> actions) => Padding(
+        padding: const EdgeInsets.only(top: 40),
+        child: Column(children: [
+          Icon(icon, size: 44, color: muted),
+          const SizedBox(height: 12),
+          Text(title, style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          Text(body, textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 12, height: 1.4)),
+          const SizedBox(height: 16),
+          Wrap(spacing: 10, runSpacing: 10, alignment: WrapAlignment.center, children: actions),
+        ]),
+      );
+
+  Widget _venueCard(Map<String, dynamic> v) {
+    final amenities = ((v['amenities'] as List?) ?? const []).take(3).join(' • ');
+    return InkWell(
+      borderRadius: BorderRadius.circular(18),
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VenueDetailScreen(venue: v))),
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 10, offset: Offset(0, 4))]),
+        child: Row(children: [
+          Container(
+            width: 52,
+            height: 52,
+            decoration: BoxDecoration(color: const Color(0xFFE2EAFF), borderRadius: BorderRadius.circular(14)),
+            child: const Icon(Icons.sports_tennis_rounded, color: AppColors.primary),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text('${v['name']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 2),
+              Text('${v['sport']} • ${v['environment']} • ${v['area']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 12)),
+              if (amenities.isNotEmpty) Text(amenities, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w600)),
+            ]),
+          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+            Text('LKR ${(v['hourly_rate'] as num?)?.toStringAsFixed(0) ?? '-'}', style: const TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w800)),
+            const Text('/ hr', style: TextStyle(color: muted, fontSize: 10)),
+          ]),
+        ]),
+      ),
     );
   }
 }

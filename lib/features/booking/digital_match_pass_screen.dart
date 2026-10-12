@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/toast.dart';
+import '../../core/actions.dart';
 
 class DigitalMatchPassScreen extends StatelessWidget {
   const DigitalMatchPassScreen({super.key, required this.bookingRef});
@@ -35,8 +37,8 @@ class DigitalMatchPassScreen extends StatelessWidget {
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.share_outlined, color: ink), onPressed: () {}),
-          IconButton(icon: const Icon(Icons.more_vert_rounded, color: ink), onPressed: () {}),
+          IconButton(icon: const Icon(Icons.share_outlined, color: ink), onPressed: () => shareText('My SportsBook match pass - booking ${bookingRef}. Show this reference at the venue gate.')),
+          IconButton(icon: const Icon(Icons.more_vert_rounded, color: ink), onPressed: () => copyText(bookingRef, message: 'Booking reference copied')),
           Container(
             margin: const EdgeInsets.only(right: 16, left: 4),
             width: 32,

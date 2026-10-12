@@ -1,8 +1,12 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
 
 class RateReviewScreen extends StatefulWidget {
-  const RateReviewScreen({super.key});
+  const RateReviewScreen({super.key, this.booking});
+
+  final Map<String, dynamic>? booking;
 
   @override
   State<RateReviewScreen> createState() => _RateReviewScreenState();
@@ -14,6 +18,46 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
   static const softBlue = Color(0xFFF0F2FF);
   
   bool _publishAsVerified = true;
+  int _rating = 0;
+  bool _submitting = false;
+  final _service = SupabaseService();
+  final _comment = TextEditingController();
+
+  @override
+  void dispose() {
+    _comment.dispose();
+    super.dispose();
+  }
+
+  static const _ratingText = ['Tap a star to rate', 'Poor', 'Fair', 'Good', 'Great', 'Outstanding Experience!'];
+
+  Future<void> _submit() async {
+    if (_rating == 0) {
+      toast('Please choose a star rating first.');
+      return;
+    }
+    final ref = widget.booking?['booking_ref'] as String?;
+    if (ref == null) {
+      toast('No booking selected.');
+      return;
+    }
+    setState(() => _submitting = true);
+    try {
+      await _service.createReview(
+        bookingRef: ref,
+        venueId: widget.booking?['venue_id'] as String?,
+        rating: _rating,
+        comment: _comment.text.trim().isEmpty ? null : _comment.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      toast('Thanks! Your review was submitted.');
+    } catch (e) {
+      if (mounted) toast('Could not submit review: $e');
+    } finally {
+      if (mounted) setState(() => _submitting = false);
+    }
+  }
   
   final List<String> _selectedHighlights = [
     'Clean parquet floor',
@@ -180,13 +224,17 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
         children: [
           const Text('OVERALL MATCH EXPERIENCE', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
           const SizedBox(height: 8),
-          const Text('How was Court 1 today?', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+          Text('How was ${widget.booking?['court_name'] ?? 'your court'}?', style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
           const SizedBox(height: 16),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: List.generate(5, (index) => const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 4),
-              child: Icon(Icons.star_rounded, color: AppColors.primary, size: 32),
+            children: List.generate(5, (index) => InkWell(
+              customBorder: const CircleBorder(),
+              onTap: () => setState(() => _rating = index + 1),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: Icon(index < _rating ? Icons.star_rounded : Icons.star_outline_rounded, color: AppColors.primary, size: 36),
+              ),
             )),
           ),
           const SizedBox(height: 16),
@@ -195,12 +243,12 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
             decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
             child: Row(
               mainAxisSize: MainAxisSize.min,
-              children: const [
-                Icon(Icons.circle, color: AppColors.primary, size: 6),
-                SizedBox(width: 6),
-                Text('5.0 / 5.0', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
-                SizedBox(width: 6),
-                Text('• Outstanding Experience!', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w600)),
+              children: [
+                const Icon(Icons.circle, color: AppColors.primary, size: 6),
+                const SizedBox(width: 6),
+                Text('$_rating.0 / 5.0', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+                const SizedBox(width: 6),
+                Text('• ${_ratingText[_rating]}', style: const TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w600)),
               ],
             ),
           ),
@@ -324,22 +372,20 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Exceptional teak wood grip! Lighting was spot on with zero ceiling glare during smashes. Turnstiles scanned the match QR instantly without queuing.',
-                style: TextStyle(color: ink, fontSize: 11, height: 1.4),
+              TextField(
+                controller: _comment,
+                maxLines: 4,
+                maxLength: 500,
+                onChanged: (_) => setState(() {}),
+                style: const TextStyle(color: ink, fontSize: 12, height: 1.4),
+                decoration: const InputDecoration(border: InputBorder.none, hintText: 'Tell other athletes about the court, lighting, facilities…', counterText: ''),
               ),
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Row(
-                    children: const [
-                      Icon(Icons.check_circle, color: AppColors.primary, size: 12),
-                      SizedBox(width: 4),
-                      Text('Meets length criteria', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
-                    ],
-                  ),
-                  const Text('148 / 500 characters', style: TextStyle(color: muted, fontSize: 9)),
+                  const SizedBox(),
+                  Text('${_comment.text.length} / 500 characters', style: const TextStyle(color: muted, fontSize: 9)),
                 ],
               ),
             ],
@@ -478,12 +524,9 @@ class _RateReviewScreenState extends State<RateReviewScreen> {
         SizedBox(
           width: double.infinity,
           child: FilledButton.icon(
-            onPressed: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Review submitted!')));
-            },
+            onPressed: _submitting ? null : _submit,
             icon: const Icon(Icons.stars, size: 18),
-            label: const Text('Submit Review & Earn 50 Points', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+            label: const Text('Submit Review', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFF0D6EFD),
               foregroundColor: Colors.white,

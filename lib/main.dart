@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'core/app_theme.dart';
-import 'core/main_wrapper.dart';
+import 'core/role_gate.dart';
 import 'core/supabase_config.dart';
 import 'core/supabase_service.dart';
+import 'core/toast.dart';
 import 'features/auth/onboarding_screen.dart';
 import 'features/auth/splash_screen.dart';
 
@@ -47,13 +48,14 @@ class SportsBookApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'SportsBook',
+      scaffoldMessengerKey: appMessengerKey,
       debugShowCheckedModeBanner: false,
       theme: AppTheme.lightTheme,
       scrollBehavior: MyCustomScrollBehavior(),
       // Define named routes for easier navigation
       routes: {
         '/onboarding': (context) => const OnboardingScreen(),
-        '/main': (context) => const MainWrapper(),
+        '/main': (context) => const RoleGate(),
       },
       // Use a custom builder to handle auth state explicitly
       home: FutureBuilder(
@@ -63,7 +65,7 @@ class SportsBookApp extends StatelessWidget {
             return const SplashScreen();
           }
           // Default fallback behavior - skip onboarding for demo if needed
-          return supabase.auth.currentSession != null ? const MainWrapper() : const OnboardingScreen();
+          return supabase.auth.currentSession != null ? const RoleGate() : const OnboardingScreen();
         },
       ),
     );

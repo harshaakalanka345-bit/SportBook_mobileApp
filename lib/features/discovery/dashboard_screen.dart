@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/supabase_service.dart';
+import '../booking/booking_flow/booking_step1_screen.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'venue_detail_screen.dart';
@@ -17,6 +18,15 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   final _service = SupabaseService();
   String _selectedSport = 'Badminton';
+  Map<String, dynamic>? _lastBooking;
+
+  @override
+  void initState() {
+    super.initState();
+    _service.getUserBookings().then((list) {
+      if (mounted && list.isNotEmpty) setState(() => _lastBooking = list.first);
+    }).catchError((_) {});
+  }
 
   static const _ink = Color(0xFF11182D);
   static const _muted = Color(0xFF697083);
@@ -185,7 +195,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
           Container(
             padding: const EdgeInsets.fromLTRB(12, 12, 10, 12),
             decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(14)),
-            child: Row(children: [const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('FAST AVAILABILITY', style: TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('Today, 6:00 PM • LKR 2,500', style: TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600))])), _SmallBlueButton(label: 'Re-book', icon: Icons.arrow_forward_rounded, onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VenueDetailScreen(venue: {'name': 'CSA National Arena'}))))]),
+            child: Row(children: [
+              Expanded(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text(_lastBooking == null ? 'GET STARTED' : 'BOOK AGAIN', style: const TextStyle(color: _muted, fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(
+                    _lastBooking == null ? 'Find and book your first court' : '${(_lastBooking!['venues'] as Map?)?['name'] ?? 'Your last venue'}',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(color: _ink, fontSize: 14, fontWeight: FontWeight.w600),
+                  ),
+                ]),
+              ),
+              _SmallBlueButton(
+                label: _lastBooking == null ? 'Browse' : 'Re-book',
+                icon: Icons.arrow_forward_rounded,
+                onPressed: () {
+                  final v = _lastBooking?['venues'];
+                  if (v is Map && v['id'] != null) {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: Map<String, dynamic>.from(v))));
+                  } else {
+                    Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen()));
+                  }
+                },
+              ),
+            ]),
           ),
         ],
       ),
@@ -252,13 +287,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
         const SizedBox(height: 6),
         const Text('Flat 25% OFF on morning slots before 10 AM at\nselect arenas.', style: TextStyle(color: Colors.white70, fontSize: 14, height: 1.4)),
         const SizedBox(height: 15),
-        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),)), const SizedBox(width: 8), TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const VenueDetailScreen(venue: {'name': 'CSA National Arena'}))), icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
+        Row(children: [Expanded(child: Container(padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7), decoration: BoxDecoration(color: Colors.white24, borderRadius: BorderRadius.circular(15)), child: const Text('MORNING SMASH', overflow: TextOverflow.ellipsis, style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),)), const SizedBox(width: 8), TextButton.icon(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())), icon: const Text('Claim Offer', style: TextStyle(color: Colors.white)), label: const Icon(Icons.arrow_forward_rounded, color: Colors.white, size: 18))]),
       ]),
     );
   }
 
   Widget _buildNearbyHeader() {
-    return const Row(children: [Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Nearby Courts', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)), SizedBox(height: 3), Text('Real-time availability in Colombo', style: TextStyle(color: _muted, fontSize: 14))])), Text('▧ Map View', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700))]);
+    return Row(children: [
+      const Expanded(
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Nearby Courts', style: TextStyle(color: _ink, fontSize: 22, fontWeight: FontWeight.w700)),
+          SizedBox(height: 3),
+          Text('Real-time availability in Colombo', style: TextStyle(color: _muted, fontSize: 14)),
+        ]),
+      ),
+      TextButton(
+        onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen())),
+        child: const Text('See all →', style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700)),
+      ),
+    ]);
   }
 
   Widget _buildVenues() {
@@ -269,19 +316,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
         if (snapshot.hasError) return Text('Unable to load courts: ${snapshot.error}', style: const TextStyle(color: _muted));
         final venues = snapshot.data ?? [];
         if (venues.isEmpty) return const Text('No courts found for this sport.', style: TextStyle(color: _muted));
-        return Column(children: venues.take(3).toList().asMap().entries.map((entry) => Padding(padding: const EdgeInsets.only(bottom: 16), child: _VenueCard(venue: entry.value, imageUrl: _venueImages[entry.key % _venueImages.length], onBook: () => _bookVenue(entry.value)))).toList());
+        return Column(children: venues.asMap().entries.map((entry) => Padding(padding: const EdgeInsets.only(bottom: 16), child: _VenueCard(venue: entry.value, imageUrl: _venueImages[entry.key % _venueImages.length], onBook: () => _bookVenue(entry.value)))).toList());
       },
     );
   }
 
   Future<void> _bookVenue(Map<String, dynamic> venue) async {
-    final rate = (venue['hourly_rate'] as num?)?.toDouble() ?? 1500;
-    try {
-      await _service.createBooking(venueId: venue['id'] ?? 'ven-01', bookingRef: 'SB-${DateTime.now().millisecondsSinceEpoch}', courtName: '${venue['name']} - Court 1', dateSchedule: DateTime.now().toIso8601String().split('T').first, timeSlot: '06:00 PM - 07:00 PM', totalPaid: rate, qrPin: '8492');
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Court booked successfully!'), backgroundColor: Colors.green));
-    } catch (error) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Booking error: $error')));
-    }
+    Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: venue)));
   }
 }
 
@@ -295,7 +336,10 @@ class _VenueCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rate = venue['hourly_rate'] ?? 1500;
-    return Container(
+    return GestureDetector(
+      behavior: HitTestBehavior.opaque,
+      onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => VenueDetailScreen(venue: venue))),
+      child: Container(
       clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 12, offset: Offset(0, 5))]),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -308,7 +352,7 @@ class _VenueCard extends StatelessWidget {
           Row(children: [const Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('NEXT AVAILABLE', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)), SizedBox(height: 4), Text('6:00 PM • ', style: TextStyle(color: _DashboardScreenState._ink, fontSize: 15, fontWeight: FontWeight.w700))]), Expanded(child: Text('LKR $rate/hr', style: const TextStyle(color: _DashboardScreenState._ink, fontSize: 13, fontWeight: FontWeight.w700))), _SmallBlueButton(label: 'Book Slot', icon: Icons.arrow_forward_rounded, onPressed: onBook)]),
         ])),
       ]),
-    );
+    ));
   }
 }
 

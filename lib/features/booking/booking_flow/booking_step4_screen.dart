@@ -2,6 +2,11 @@ import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
 import '../booking_screen.dart';
+import 'package:qr_flutter/qr_flutter.dart';
+
+import '../../../core/booking_draft.dart';
+import '../../../core/toast.dart';
+import '../../../core/actions.dart';
 
 class BookingStep4Screen extends StatelessWidget {
   const BookingStep4Screen({super.key});
@@ -73,10 +78,10 @@ class BookingStep4Screen extends StatelessWidget {
         Container(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
           decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
-          child: const Text('STEP 4 OF 4 â€¢ CONFIRMED', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
+          child: const Text('STEP 4 OF 4 • CONFIRMED', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
         ),
         const SizedBox(height: 12),
-        const Text('Booking Confirmed! ðŸŽ‰', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w800)),
+        const Text('Booking Confirmed! 🎉', style: TextStyle(color: ink, fontSize: 24, fontWeight: FontWeight.w800)),
         const SizedBox(height: 8),
         const Text('Your court is reserved and locked in. See you\non the court!', style: TextStyle(color: muted, fontSize: 12, height: 1.4), textAlign: TextAlign.center),
         const SizedBox(height: 12),
@@ -85,9 +90,9 @@ class BookingStep4Screen extends StatelessWidget {
           decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
           child: Row(
             mainAxisSize: MainAxisSize.min,
-            children: const [
+            children: [
               Text('Ref: ', style: TextStyle(color: muted, fontSize: 11)),
-              Text('#SB-COL-2024-8941', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
+              Text('#${BookingDraft.bookingRef ?? '-'}', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
               SizedBox(width: 6),
               Icon(Icons.copy_rounded, size: 12, color: AppColors.primary),
             ],
@@ -123,13 +128,13 @@ class BookingStep4Screen extends StatelessWidget {
                 ),
                 const SizedBox(height: 24),
                 const Text('ARENA VENUE', style: TextStyle(color: Colors.white70, fontSize: 8, fontWeight: FontWeight.w800)),
-                const Text('CSA National Arena', style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
+                Text(BookingDraft.venueName, style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w800)),
                 const SizedBox(height: 4),
                 Row(
-                  children: const [
+                  children: [
                     Icon(Icons.location_on_outlined, size: 12, color: Colors.white70),
                     SizedBox(width: 4),
-                    Text('Maitland Place, Colombo 07', style: TextStyle(color: Colors.white70, fontSize: 10)),
+                    Text(BookingDraft.venueArea, style: TextStyle(color: Colors.white70, fontSize: 10)),
                   ],
                 ),
               ],
@@ -146,10 +151,10 @@ class BookingStep4Screen extends StatelessWidget {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text('SPORT & COURT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                          Text('Badminton â€¢ Court 1', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                          Text('Indoor Wooden Parquet', style: TextStyle(color: muted, fontSize: 10)),
+                          Text('${BookingDraft.sport} • ${BookingDraft.courtName}', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
+                          Text(BookingDraft.courtType, style: TextStyle(color: muted, fontSize: 10)),
                         ],
                       ),
                     ),
@@ -167,10 +172,10 @@ class BookingStep4Screen extends StatelessWidget {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Text('DATE & SCHEDULE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                            Text('Today, 24 Oct 2024', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                            Text('06:00 PM - 08:00 PM (2 Hours)', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
+                            Text(BookingDraft.dateLabel, style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
+                            Text('${BookingDraft.timeRange} (${BookingDraft.hours == BookingDraft.hours.roundToDouble() ? BookingDraft.hours.round() : BookingDraft.hours} Hours)', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -188,9 +193,9 @@ class BookingStep4Screen extends StatelessWidget {
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
-                          children: const [
+                          children: [
                             Text('ADD-ONS INCLUDED', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                            Text('2x Yonex Rackets + 1x Feather Shuttle Tube', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
+                            Text(BookingDraft.addonsLabel.isEmpty ? 'None' : BookingDraft.addonsLabel, style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
                           ],
                         ),
                       ),
@@ -203,19 +208,19 @@ class BookingStep4Screen extends StatelessWidget {
                   children: [
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
+                      children: [
                         Text('TOTAL PAID (LKR)', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                        Text('LKR 5,825', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+                        Text('LKR ${BookingDraft.money(BookingDraft.total)}', style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
                       ],
                     ),
                     Container(
                       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)),
                       child: Row(
-                        children: const [
+                        children: [
                           Icon(Icons.credit_card_rounded, size: 12, color: AppColors.primary),
                           SizedBox(width: 6),
-                          Text('Visa â€¢â€¢â€¢â€¢ 4821', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
+                          Text(BookingDraft.paymentLabel, style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w600)),
                         ],
                       ),
                     ),
@@ -239,19 +244,19 @@ class BookingStep4Screen extends StatelessWidget {
                   height: 140,
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
-                  child: const Icon(Icons.qr_code_2_rounded, size: 120, color: ink),
+                  child: QrImageView(data: 'SPORTSBOOK|${BookingDraft.bookingRef}|${BookingDraft.pin}', size: 140, padding: EdgeInsets.zero),
                 ),
                 const SizedBox(height: 16),
-                const Text('Scan this QR code at the CSA Arena entrance gate\nor present to the court manager on arrival.', style: TextStyle(color: muted, fontSize: 10, height: 1.4), textAlign: TextAlign.center),
+                Text('Scan this QR code at the ${BookingDraft.venueName} entrance\nor present to the court manager on arrival.', style: TextStyle(color: muted, fontSize: 10, height: 1.4), textAlign: TextAlign.center),
                 const SizedBox(height: 16),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
                   decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
-                    children: const [
+                    children: [
                       Text('MANUAL CHECK-IN ', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
-                      Text('PIN: 8492', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)),
+                      Text('PIN: ${BookingDraft.pin ?? '-'}', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)),
                     ],
                   ),
                 ),
@@ -269,17 +274,38 @@ class BookingStep4Screen extends StatelessWidget {
       children: [
         const Text('QUICK MATCH ACTIONS', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
         const SizedBox(height: 12),
-        _actionRow(Icons.calendar_month_outlined, 'Add to Apple / Google Calendar', 'Includes court gate directions & PIN'),
+        _actionRow(Icons.calendar_month_outlined, 'Add to Apple / Google Calendar', 'Includes court gate directions & PIN', () {
+          final s = BookingDraft.startAt;
+          final e = BookingDraft.endAt;
+          if (s == null || e == null) {
+            toast('No scheduled time to add.');
+            return;
+          }
+          addToCalendar(
+            title: '${BookingDraft.sport} at ${BookingDraft.venueName}',
+            start: s,
+            end: e,
+            location: '${BookingDraft.venueName}, ${BookingDraft.venueArea}',
+            details: 'Booking ${BookingDraft.bookingRef} - ${BookingDraft.courtName}. Gate PIN: ${BookingDraft.pin}',
+          );
+        }),
         const SizedBox(height: 8),
-        _actionRow(Icons.share_outlined, 'Share Match Pass with Team', 'Send pass via WhatsApp or SMS'),
+        _actionRow(Icons.share_outlined, 'Share Match Pass with Team', 'Send pass via WhatsApp or SMS', () {
+          shareText('Join me for ${BookingDraft.sport} at ${BookingDraft.venueName}\n${BookingDraft.courtName} - ${BookingDraft.dateLabel}, ${BookingDraft.timeRange}\nBooking ref: ${BookingDraft.bookingRef}');
+        }),
         const SizedBox(height: 8),
-        _actionRow(Icons.directions_outlined, 'Get GPS Directions', 'Open in Google Maps / Waze (0.8 km away)'),
+        _actionRow(Icons.directions_outlined, 'Get GPS Directions', 'Open in Google Maps', () {
+          openDirections('${BookingDraft.venueName}, ${BookingDraft.venueArea}');
+        }),
       ],
     );
   }
 
-  Widget _actionRow(IconData icon, String title, String subtitle) {
-    return Container(
+  Widget _actionRow(IconData icon, String title, String subtitle, VoidCallback onTap) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(16),
+      onTap: onTap,
+      child: Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
       child: Row(
@@ -298,7 +324,7 @@ class BookingStep4Screen extends StatelessWidget {
           const Icon(Icons.chevron_right_rounded, size: 16, color: muted),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildArrivalChecklist() {
@@ -365,7 +391,7 @@ class BookingStep4Screen extends StatelessWidget {
                 Text('Maitland Place Arena', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
                 Text('Colombo 07, Western Province', style: TextStyle(color: muted, fontSize: 10)),
                 SizedBox(height: 4),
-                Text('â–³ Est. 4 min drive', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
+                Text('△ Est. 4 min drive', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700)),
               ],
             ),
           ),
@@ -386,7 +412,7 @@ class BookingStep4Screen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 4),
-        const Text('SportsBook Kinetic Booking System â€¢ Version 2.4.0', style: TextStyle(color: muted, fontSize: 9)),
+        const Text('SportsBook Kinetic Booking System • Version 2.4.0', style: TextStyle(color: muted, fontSize: 9)),
       ],
     );
   }

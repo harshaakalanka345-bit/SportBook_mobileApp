@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
-import '../booking/booking_flow/booking_step1_screen.dart';
+import '../booking/booking_flow/booking_step1_screen.dart';
+import '../../core/toast.dart';
+import '../../core/actions.dart';
+import '../../core/supabase_service.dart';
 
 class VenueDetailScreen extends StatefulWidget {
   const VenueDetailScreen({super.key, required this.venue});
@@ -15,6 +18,38 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
   static const _ink = Color(0xFF11182D);
   static const _muted = Color(0xFF697083);
   static const _softBlue = Color(0xFFF0F3FF);
+
+  final _service = SupabaseService();
+  bool _favorite = false;
+
+  String get _venueName => '${widget.venue['name'] ?? 'this venue'}';
+  String get _venueAddress => '${widget.venue['address'] ?? widget.venue['area'] ?? ''}'.trim();
+  String get _venueQuery => [widget.venue['name'], widget.venue['address'] ?? widget.venue['area']].where((e) => e != null && '$e'.isNotEmpty).join(', ');
+
+  @override
+  void initState() {
+    super.initState();
+    final id = widget.venue['id'] as String?;
+    if (id != null) {
+      _service.isFavorite(id).then((v) {
+        if (mounted) setState(() => _favorite = v);
+      }).catchError((_) {});
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    final id = widget.venue['id'] as String?;
+    if (id == null) return;
+    try {
+      final now = await _service.toggleFavorite(id);
+      if (mounted) setState(() => _favorite = now);
+      toast(now ? 'Saved to your favourites' : 'Removed from favourites');
+    } catch (e) {
+      toast('Could not update favourites: $e');
+    }
+  }
+
+  void _book() => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: widget.venue)));
 
   @override
   Widget build(BuildContext context) {
@@ -80,8 +115,8 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ],
             ),
           ),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.bookmark_border_rounded, color: _ink)),
-          IconButton(onPressed: () {}, icon: const Icon(Icons.share_outlined, color: _ink)),
+          IconButton(onPressed: _toggleFavorite, icon: Icon(_favorite ? Icons.bookmark_rounded : Icons.bookmark_border_rounded, color: _favorite ? AppColors.primary : _ink)),
+          IconButton(onPressed: () => shareText('Check out $_venueName on SportsBook${_venueAddress.isEmpty ? '' : ' - $_venueAddress'}.'), icon: const Icon(Icons.share_outlined, color: _ink)),
           const CircleAvatar(
             radius: 16,
             backgroundImage: NetworkImage('https://ui-avatars.com/api/?name=User&background=0D8ABC&color=fff'),
@@ -390,12 +425,12 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 child: const Icon(Icons.location_on_rounded, color: AppColors.primary, size: 16),
               ),
               const SizedBox(width: 12),
-              const Expanded(
+              Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Maitland Place, Colombo 07', style: TextStyle(color: _ink, fontSize: 13, fontWeight: FontWeight.w700)),
-                    Text('Cinnamon Gardens • 0.8 km away from you', style: TextStyle(color: _muted, fontSize: 10)),
+                    Text(_venueAddress.isEmpty ? 'Address not provided' : _venueAddress, style: const TextStyle(color: _ink, fontSize: 13, fontWeight: FontWeight.w700)),
+                    Text('${widget.venue['area'] ?? ''}', style: const TextStyle(color: _muted, fontSize: 10)),
                   ],
                 ),
               ),
@@ -412,10 +447,10 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  children: const [
-                    Icon(Icons.sports_tennis_rounded, color: AppColors.primary),
-                    SizedBox(height: 4),
-                    Text('CSA ARENA CENTER', style: TextStyle(color: _ink, fontSize: 8, fontWeight: FontWeight.w800)),
+                  children: [
+                    const Icon(Icons.sports_tennis_rounded, color: AppColors.primary),
+                    const SizedBox(height: 4),
+                    Text(_venueName.toUpperCase(), style: const TextStyle(color: _ink, fontSize: 8, fontWeight: FontWeight.w800)),
                   ],
                 ),
               ),
@@ -426,7 +461,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
             children: [
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: () {},
+                  onPressed: () => openDirections(_venueQuery),
                   icon: const Icon(Icons.directions_rounded, size: 16),
                   label: const Text('Get Directions'),
                   style: FilledButton.styleFrom(
@@ -439,7 +474,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
               ),
               const SizedBox(width: 12),
               FilledButton.icon(
-                onPressed: () {},
+                onPressed: () => copyText(_venueAddress.isEmpty ? _venueName : '$_venueName, $_venueAddress', message: 'Address copied'),
                 icon: const Icon(Icons.copy_rounded, size: 16),
                 label: const Text('Copy'),
                 style: FilledButton.styleFrom(
@@ -551,7 +586,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
                 ],
               ),
               FilledButton(
-                onPressed: () {},
+                onPressed: canBook ? _book : null,
                 style: FilledButton.styleFrom(
                   backgroundColor: canBook ? AppColors.primary : const Color(0xFFE5E7EB),
                   foregroundColor: canBook ? Colors.white : _ink,
@@ -731,7 +766,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           Expanded(
             child: FilledButton.icon(
               onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep1Screen()));
+                Navigator.push(context, MaterialPageRoute(builder: (context) => BookingStep1Screen(venue: widget.venue)));
               },
               icon: const Icon(Icons.calendar_month_rounded, size: 18),
               label: const Text('Book Court Now', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),

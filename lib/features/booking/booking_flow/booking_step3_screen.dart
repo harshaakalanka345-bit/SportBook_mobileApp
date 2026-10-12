@@ -1,10 +1,202 @@
 import 'package:flutter/material.dart';
 
 import '../../../core/app_theme.dart';
+import '../../../core/booking_draft.dart';
+import '../../../core/supabase_service.dart';
+import '../../../core/toast.dart';
 import 'booking_step4_screen.dart';
 
-class BookingStep3Screen extends StatelessWidget {
+class BookingStep3Screen extends StatefulWidget {
   const BookingStep3Screen({super.key});
+
+  @override
+  State<BookingStep3Screen> createState() => _BookingStep3ScreenState();
+}
+
+class _BookingStep3ScreenState extends State<BookingStep3Screen> {
+  String _method = 'visa';
+  bool _saveCard = true;
+  final _cvv = TextEditingController();
+
+  @override
+  void dispose() {
+    _cvv.dispose();
+    super.dispose();
+  }
+
+  bool get _counter => _method == 'counter';
+
+  /// Card entered in this session. Only the last 4 digits are kept - never the full number or CVV.
+  ({String last4, String name, String exp})? _newCard;
+
+  static bool _luhn(String digits) {
+    var sum = 0;
+    var alt = false;
+    for (var i = digits.length - 1; i >= 0; i--) {
+      var n = int.parse(digits[i]);
+      if (alt) {
+        n *= 2;
+        if (n > 9) n -= 9;
+      }
+      sum += n;
+      alt = !alt;
+    }
+    return sum % 10 == 0;
+  }
+
+  Future<void> _addCard() async {
+    final number = TextEditingController();
+    final name = TextEditingController();
+    final exp = TextEditingController();
+    final cvv = TextEditingController();
+    final formKey = GlobalKey<FormState>();
+    final result = await showModalBottomSheet<bool>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.fromLTRB(20, 20, 20, MediaQuery.of(ctx).viewInsets.bottom + 20),
+        child: Form(
+          key: formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Add Credit / Debit Card', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w800, color: ink)),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: number,
+                keyboardType: TextInputType.number,
+                maxLength: 19,
+                decoration: const InputDecoration(labelText: 'Card number', counterText: ''),
+                validator: (v) {
+                  final d = (v ?? '').replaceAll(RegExp(r'\s'), '');
+                  return (d.length >= 13 && d.length <= 19 && RegExp(r'^\d+$').hasMatch(d) && _luhn(d)) ? null : 'Enter a valid card number';
+                },
+              ),
+              TextFormField(
+                controller: name,
+                textCapitalization: TextCapitalization.words,
+                decoration: const InputDecoration(labelText: 'Name on card'),
+                validator: (v) => (v ?? '').trim().length < 2 ? 'Enter the cardholder name' : null,
+              ),
+              Row(children: [
+                Expanded(
+                  child: TextFormField(
+                    controller: exp,
+                    keyboardType: TextInputType.number,
+                    maxLength: 5,
+                    decoration: const InputDecoration(labelText: 'Expiry (MM/YY)', counterText: ''),
+                    validator: (v) {
+                      final m = RegExp(r'^(\d{2})/(\d{2})$').firstMatch((v ?? '').trim());
+                      if (m == null) return 'Use MM/YY';
+                      final month = int.parse(m.group(1)!);
+                      final year = 2000 + int.parse(m.group(2)!);
+                      final now = DateTime.now();
+                      if (month < 1 || month > 12) return 'Invalid month';
+                      if (DateTime(year, month + 1).isBefore(now)) return 'Card expired';
+                      return null;
+                    },
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: TextFormField(
+                    controller: cvv,
+                    keyboardType: TextInputType.number,
+                    obscureText: true,
+                    maxLength: 4,
+                    decoration: const InputDecoration(labelText: 'CVV', counterText: ''),
+                    validator: (v) => RegExp(r'^\d{3,4}$').hasMatch((v ?? '').trim()) ? null : 'Invalid CVV',
+                  ),
+                ),
+              ]),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: () {
+                    if (formKey.currentState!.validate()) Navigator.pop(ctx, true);
+                  },
+                  style: FilledButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 14)),
+                  child: const Text('Use this card'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (result == true) {
+      final digits = number.text.replaceAll(RegExp(r'\s'), '');
+      setState(() {
+        _newCard = (last4: digits.substring(digits.length - 4), name: name.text.trim(), exp: exp.text.trim());
+        _method = 'newcard';
+      });
+    }
+    for (final c in [number, name, exp, cvv]) {
+      c.dispose();
+    }
+  }
+
+  final _service = SupabaseService();
+  bool _paying = false;
+
+  static const _methodLabels = {
+    'visa': 'Visa •••• 4821',
+    'newcard': 'Card',
+    'sampath': 'Mastercard •••• 9012',
+    'genie': 'Genie by Dialog',
+    'frimi': 'FriMi',
+    'lankapay': 'LankaPay / JustPay',
+    'wallet': 'Apple Pay / Google Wallet',
+    'counter': 'Pay at venue counter',
+  };
+
+  double get _payNow => _counter ? 1200.0 : BookingDraft.share;
+
+  Future<void> _pay() async {
+    final venueId = BookingDraft.venue?['id'] as String?;
+    if (venueId == null) {
+      toast('This venue is not bookable (no venue selected).');
+      return;
+    }
+    if (_service.currentUser == null) {
+      toast('Please sign in to complete your booking.');
+      return;
+    }
+    setState(() => _paying = true);
+    try {
+      final ref = 'SB-${DateTime.now().millisecondsSinceEpoch.toRadixString(36).toUpperCase()}';
+      final pin = (1000 + DateTime.now().microsecondsSinceEpoch % 9000).toString();
+      await _service.createBooking(
+        venueId: venueId,
+        bookingRef: ref,
+        courtName: BookingDraft.courtName,
+        dateSchedule: BookingDraft.dateIso,
+        timeSlot: BookingDraft.slotLabels.join(', '),
+        totalPaid: _payNow,
+        qrPin: pin,
+        addons: [
+          if (BookingDraft.addonsLabel.isNotEmpty) {'label': BookingDraft.addonsLabel, 'fee': BookingDraft.gearFee},
+          {'payment_method': _methodLabels[_method], 'full_total': BookingDraft.total},
+        ],
+      );
+      BookingDraft.bookingRef = ref;
+      BookingDraft.pin = pin;
+      BookingDraft.paymentLabel = _method == 'newcard' ? 'Card •••• ${_newCard?.last4 ?? ''}' : (_methodLabels[_method] ?? 'Card');
+      if (!mounted) return;
+      Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep4Screen()));
+    } catch (e) {
+      if (mounted) {
+        final msg = '$e';
+        toast(msg.contains('just been booked') ? 'That slot was just taken by someone else. Go back and pick another.' : 'Booking failed: $msg');
+      }
+    } finally {
+      if (mounted) setState(() => _paying = false);
+    }
+  }
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -24,7 +216,7 @@ class BookingStep3Screen extends StatelessWidget {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: const [
-            Text('SPORTSBOOK â€¢ BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+            Text('SPORTSBOOK • BOOKING FLOW', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
             Text('Secure Payment', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
           ],
         ),
@@ -121,9 +313,9 @@ class BookingStep3Screen extends StatelessWidget {
           Row(
             crossAxisAlignment: CrossAxisAlignment.baseline,
             textBaseline: TextBaseline.alphabetic,
-            children: const [
-              Text('LKR 5,825 ', style: TextStyle(color: AppColors.primary, fontSize: 32, fontWeight: FontWeight.w800)),
-              Text('inclusive of taxes', style: TextStyle(color: muted, fontSize: 11)),
+            children: [
+              Text('LKR ${BookingDraft.money(_payNow)} ', style: const TextStyle(color: AppColors.primary, fontSize: 28, fontWeight: FontWeight.w800)),
+              Text(_counter ? 'deposit now' : 'inclusive of taxes', style: const TextStyle(color: muted, fontSize: 11)),
             ],
           ),
           const SizedBox(height: 16),
@@ -137,9 +329,9 @@ class BookingStep3Screen extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('Booking CSA Arena â€¢ Court #', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                      Text('Today 6:00 PM - 8:00 PM (2 hrs)', style: TextStyle(color: muted, fontSize: 10)),
+                    children: [
+                      Text('${BookingDraft.venueName} • ${BookingDraft.courtName}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
+                      Text('${BookingDraft.dateLabel}, ${BookingDraft.timeRange}', style: const TextStyle(color: muted, fontSize: 10)),
                     ],
                   ),
                 ),
@@ -163,14 +355,14 @@ class BookingStep3Screen extends StatelessWidget {
           ],
         ),
         const SizedBox(height: 16),
-        Container(
+        GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _method = 'visa'), child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFFF4F7FF), borderRadius: BorderRadius.circular(20), border: Border.all(color: AppColors.primary.withOpacity(0.2))),
+          decoration: BoxDecoration(color: _method == 'visa' ? const Color(0xFFF4F7FF) : Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: _method == 'visa' ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == 'visa' ? 1.5 : 1)),
           child: Column(
             children: [
               Row(
                 children: [
-                  const Icon(Icons.check_circle_rounded, color: AppColors.primary),
+                  Icon(_method == 'visa' ? Icons.check_circle_rounded : Icons.radio_button_unchecked, color: _method == 'visa' ? AppColors.primary : muted),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
@@ -184,7 +376,7 @@ class BookingStep3Screen extends StatelessWidget {
                           ],
                         ),
                         const SizedBox(height: 4),
-                        const Text('â€¢â€¢â€¢â€¢ 4821 â€¢ Kasun Perera â€¢ Exp 09/27', style: TextStyle(color: muted, fontSize: 10)),
+                        const Text('•••• 4821 • Kasun Perera • Exp 09/27', style: TextStyle(color: muted, fontSize: 10)),
                       ],
                     ),
                   ),
@@ -195,6 +387,7 @@ class BookingStep3Screen extends StatelessWidget {
                   ),
                 ],
               ),
+              if (_method == 'visa') ...[
               const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: Color(0xFFDCE7FF), height: 1)),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -213,9 +406,19 @@ class BookingStep3Screen extends StatelessWidget {
                     ],
                   ),
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                    width: 90,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
                     decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                    child: const Text('842', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 2)),
+                    child: TextField(
+                      controller: _cvv,
+                      keyboardType: TextInputType.number,
+                      obscureText: true,
+                      maxLength: 3,
+                      textAlign: TextAlign.center,
+                      onChanged: (_) => setState(() {}),
+                      style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w600, letterSpacing: 2),
+                      decoration: const InputDecoration(border: InputBorder.none, counterText: '', hintText: '•••'),
+                    ),
                   ),
                 ],
               ),
@@ -224,26 +427,35 @@ class BookingStep3Screen extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   const Text('Save card for future 1-tap bookings', style: TextStyle(color: muted, fontSize: 10)),
-                  Container(width: 16, height: 16, decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(4))),
+                  InkWell(
+                    onTap: () => setState(() => _saveCard = !_saveCard),
+                    child: Container(
+                      width: 18,
+                      height: 18,
+                      decoration: BoxDecoration(color: _saveCard ? AppColors.primary : Colors.white, border: Border.all(color: AppColors.primary), borderRadius: BorderRadius.circular(4)),
+                      child: _saveCard ? const Icon(Icons.check, size: 12, color: Colors.white) : null,
+                    ),
+                  ),
                 ],
               ),
+              ],
             ],
           ),
-        ),
+        )),
         const SizedBox(height: 12),
-        Container(
+        GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _method = 'sampath'), child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _method == 'sampath' ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == 'sampath' ? 1.5 : 1)),
           child: Row(
             children: [
-              Container(width: 20, height: 20, decoration: BoxDecoration(color: softBlue, shape: BoxShape.circle)),
+              Icon(_method == 'sampath' ? Icons.check_circle_rounded : Icons.radio_button_unchecked, size: 20, color: _method == 'sampath' ? AppColors.primary : muted),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
                     Text('Sampath Bank Mastercard', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
-                    Text('â€¢â€¢â€¢â€¢ 9012 â€¢ Kasun P. â€¢ Exp 11/26', style: TextStyle(color: muted, fontSize: 10)),
+                    Text('•••• 9012 • Kasun P. • Exp 11/26', style: TextStyle(color: muted, fontSize: 10)),
                   ],
                 ),
               ),
@@ -255,9 +467,39 @@ class BookingStep3Screen extends StatelessWidget {
               ),
             ],
           ),
-        ),
+        )),
         const SizedBox(height: 12),
-        Container(
+        if (_newCard != null) ...[
+          GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => setState(() => _method = 'newcard'),
+            child: Container(
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _method == 'newcard' ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == 'newcard' ? 1.5 : 1)),
+              child: Row(
+                children: [
+                  Icon(_method == 'newcard' ? Icons.check_circle_rounded : Icons.radio_button_unchecked, size: 20, color: _method == 'newcard' ? AppColors.primary : muted),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Card •••• ${_newCard!.last4}', style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w700)),
+                        Text('${_newCard!.name} • Exp ${_newCard!.exp}', style: const TextStyle(color: muted, fontSize: 10)),
+                      ],
+                    ),
+                  ),
+                  const Icon(Icons.credit_card_rounded, size: 18, color: muted),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+        ],
+        InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: _addCard,
+          child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(color: const Color(0xFFF4F7FF), borderRadius: BorderRadius.circular(16)),
           child: Row(
@@ -268,6 +510,7 @@ class BookingStep3Screen extends StatelessWidget {
               Text('Add New Credit / Debit Card', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)),
             ],
           ),
+        ),
         ),
       ],
     );
@@ -286,23 +529,23 @@ class BookingStep3Screen extends StatelessWidget {
         const SizedBox(height: 16),
         Row(
           children: [
-            Expanded(child: _walletCard('G!', 'Genie', 'by Dialog Axiata')),
+            Expanded(child: _walletCard('genie', 'G!', 'Genie', 'by Dialog Axiata')),
             const SizedBox(width: 12),
-            Expanded(child: _walletCard('FM', 'FriMi', 'Nations Trust Bank')),
+            Expanded(child: _walletCard('frimi', 'FM', 'FriMi', 'Nations Trust Bank')),
           ],
         ),
         const SizedBox(height: 12),
-        _walletRow('LankaPay', 'LankaPay / JustPay', 'Instant Direct Bank Debit (Any LK Bank)', '0% Fee'),
+        _walletRow('lankapay', 'LankaPay', 'LankaPay / JustPay', 'Instant Direct Bank Debit (Any LK Bank)', '0% Fee'),
         const SizedBox(height: 12),
-        _walletRow('icon', 'Apple Pay / Google Wallet', 'Fast contactless authentication', null),
+        _walletRow('wallet', 'icon', 'Apple Pay / Google Wallet', 'Fast contactless authentication', null),
       ],
     );
   }
 
-  Widget _walletCard(String icon, String title, String subtitle) {
-    return Container(
+  Widget _walletCard(String id, String icon, String title, String subtitle) {
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _method = id), child: Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _method == id ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == id ? 1.5 : 1)),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -310,7 +553,7 @@ class BookingStep3Screen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(6)), child: Text(icon, style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800))),
-              const Icon(Icons.chevron_right_rounded, size: 16, color: muted),
+              Icon(_method == id ? Icons.check_circle_rounded : Icons.chevron_right_rounded, size: 16, color: _method == id ? AppColors.primary : muted),
             ],
           ),
           const SizedBox(height: 12),
@@ -318,13 +561,13 @@ class BookingStep3Screen extends StatelessWidget {
           Text(subtitle, style: const TextStyle(color: muted, fontSize: 10)),
         ],
       ),
-    );
+    ));
   }
 
-  Widget _walletRow(String iconStr, String title, String subtitle, String? tag) {
-    return Container(
+  Widget _walletRow(String id, String iconStr, String title, String subtitle, String? tag) {
+    return GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _method = id), child: Container(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _method == id ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == id ? 1.5 : 1)),
       child: Row(
         children: [
           Container(width: 32, height: 32, decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)), alignment: Alignment.center, child: iconStr == 'icon' ? const Icon(Icons.contactless_outlined, size: 16, color: ink) : Text(iconStr, style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800))),
@@ -346,10 +589,10 @@ class BookingStep3Screen extends StatelessWidget {
               ],
             ),
           ),
-          const Icon(Icons.chevron_right_rounded, size: 16, color: muted),
+          Icon(_method == id ? Icons.check_circle_rounded : Icons.chevron_right_rounded, size: 16, color: _method == id ? AppColors.primary : muted),
         ],
       ),
-    );
+    ));
   }
 
   Widget _buildVenueCounterPayment() {
@@ -358,9 +601,9 @@ class BookingStep3Screen extends StatelessWidget {
       children: [
         const Text('Venue Counter Payment', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
         const SizedBox(height: 16),
-        Container(
+        GestureDetector(behavior: HitTestBehavior.opaque, onTap: () => setState(() => _method = 'counter'), child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
+          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: _method == 'counter' ? AppColors.primary : const Color(0xFFE9EEFF), width: _method == 'counter' ? 1.5 : 1)),
           child: Column(
             children: [
               Row(
@@ -388,13 +631,13 @@ class BookingStep3Screen extends StatelessWidget {
                   children: const [
                     Icon(Icons.info_outline_rounded, size: 14, color: AppColors.primary),
                     SizedBox(width: 8),
-                    Expanded(child: Text('Requires LKR 1,200 advance slot deposit now; remainder (LKR 4,625) upon arrival at reception.', style: TextStyle(color: muted, fontSize: 10, height: 1.4))),
+                    Expanded(child: Text('Requires LKR 1,200 advance slot deposit now; the remainder upon arrival at reception.', style: TextStyle(color: muted, fontSize: 10, height: 1.4))),
                   ],
                 ),
               ),
             ],
           ),
-        ),
+        )),
       ],
     );
   }
@@ -435,9 +678,7 @@ class BookingStep3Screen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep4Screen()));
-              },
+              onPressed: (_paying || (_method == 'visa' && _cvv.text.length < 3)) ? null : _pay,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -446,10 +687,10 @@ class BookingStep3Screen extends StatelessWidget {
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
-                children: const [
-                  Icon(Icons.lock, size: 16),
-                  SizedBox(width: 8),
-                  Text('Pay LKR 5,825 Securely', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
+                children: [
+                  const Icon(Icons.lock, size: 16),
+                  const SizedBox(width: 8),
+                  Text(_paying ? 'Processing…' : (_counter ? 'Pay LKR 1,200 Deposit Now' : (_method == 'visa' && _cvv.text.length < 3 ? 'Enter CVV to pay' : 'Pay LKR ${BookingDraft.money(_payNow)} Securely')), style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),
                 ],
               ),
             ),

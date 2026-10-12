@@ -1,9 +1,98 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
 
-class ModifySlotScreen extends StatelessWidget {
-  const ModifySlotScreen({super.key});
+class ModifySlotScreen extends StatefulWidget {
+  const ModifySlotScreen({super.key, this.booking});
+
+  final Map<String, dynamic>? booking;
+
+  @override
+  State<ModifySlotScreen> createState() => _ModifySlotScreenState();
+}
+
+class _Opt {
+  final int id;
+  final String time;
+  final String price;
+  final String label;
+  const _Opt(this.id, this.time, this.price, this.label);
+}
+
+class _ModifySlotScreenState extends State<ModifySlotScreen> {
+  static const _months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  static const _days = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+  static const _opts = [
+    _Opt(0, '08:00 AM - 10:00 AM', 'LKR 5,500', '8-10 AM'),
+    _Opt(1, '10:00 AM - 12:00 PM', 'LKR 5,500', '10 AM-12 PM'),
+    _Opt(2, '02:00 PM - 04:00 PM', 'LKR 5,500', '2-4 PM'),
+    _Opt(3, '05:00 PM - 07:00 PM', 'LKR 5,825', '5-7 PM'),
+    _Opt(4, '07:00 PM - 09:00 PM', 'LKR 5,825', '7-9 PM'),
+    _Opt(5, '08:00 PM - 10:00 PM', 'LKR 5,825', '8-10 PM'),
+  ];
+
+  late final DateTime _today;
+  late DateTime _stripStart;
+  late DateTime _date;
+  int? _sel;
+  final _service = SupabaseService();
+  bool _busy = false;
+  final Set<String> _taken = {};
+
+  Future<void> _loadTaken() async {
+    final venueId = widget.booking?['venue_id'] as String?;
+    if (venueId == null) return;
+    final iso = '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
+    try {
+      final rows = await _service.getBookedSlots(venueId, iso);
+      if (!mounted) return;
+      setState(() {
+        _taken
+          ..clear()
+          ..addAll(rows.where((r) => r['court_name'] == widget.booking?['court_name']).expand((r) => '${r['time_slot']}'.split(', ')));
+      });
+    } catch (_) {}
+  }
+
+  Future<void> _confirm() async {
+    final ref = widget.booking?['booking_ref'] as String?;
+    if (ref == null || _sel == null) return;
+    final iso = '${_date.year.toString().padLeft(4, '0')}-${_date.month.toString().padLeft(2, '0')}-${_date.day.toString().padLeft(2, '0')}';
+    setState(() => _busy = true);
+    try {
+      await _service.rescheduleBooking(ref, _opts[_sel!].time, iso);
+      if (!mounted) return;
+      toast('Rescheduled to ${_dateText(_date)}, ${_opts[_sel!].time}');
+      Navigator.pop(context, true);
+    } catch (e) {
+      final msg = '$e';
+      if (mounted) toast(msg.contains('just been booked') ? 'That slot is no longer free. Pick another.' : 'Could not reschedule: $msg');
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final n = DateTime.now();
+    _today = DateTime(n.year, n.month, n.day);
+    _stripStart = _today;
+    _date = _today.add(const Duration(days: 1));
+    _loadTaken();
+  }
+
+  void _shift(int days) => setState(() {
+        final next = _stripStart.add(Duration(days: days));
+        if (next.isBefore(_today)) return;
+        _stripStart = next;
+        _date = next;
+        _sel = null;
+      });
+
+  String _dateText(DateTime d) => '${_days[d.weekday - 1][0]}${_days[d.weekday - 1].substring(1).toLowerCase()}, ${d.day} ${_months[d.month - 1].substring(0, 3)}';
 
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
@@ -65,7 +154,7 @@ class ModifySlotScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(16)), child: Row(children: const [Icon(Icons.circle, size: 6, color: AppColors.primary), SizedBox(width: 6), Text('CURRENT RESERVATION', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800))])),
-              const Text('#SB-COL-2024-8941', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
+              Text('#${widget.booking?['booking_ref'] ?? ''}', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
             ],
           ),
           const SizedBox(height: 16),
@@ -76,9 +165,9 @@ class ModifySlotScreen extends StatelessWidget {
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('CSA National Arena', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text('Court 1 â€¢ Teak Flooring â€¢ Olympic Grade', style: TextStyle(color: muted, fontSize: 10)),
+                  children: [
+                    Text('${(widget.booking?['venues'] as Map?)?['name'] ?? 'Your booking'}', style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
+                    Text('${widget.booking?['court_name'] ?? ''}', style: const TextStyle(color: muted, fontSize: 10)),
                   ],
                 ),
               ),
@@ -95,9 +184,9 @@ class ModifySlotScreen extends StatelessWidget {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
-                      Text('Today, 24 Oct 2024 â€¢ 06:00 PM -', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-                      Text('08:00 PM', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
+                    children: [
+                      Text('${widget.booking?['date_schedule'] ?? ''}', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
+                      Text('${widget.booking?['time_slot'] ?? ''}', style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
                     ],
                   ),
                 ),
@@ -108,9 +197,9 @@ class ModifySlotScreen extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: const [
+            children: [
               Text('Amount Paid', style: TextStyle(color: muted, fontSize: 11)),
-              Text.rich(TextSpan(children: [TextSpan(text: 'LKR 5,825 ', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)), TextSpan(text: '(Paid in Full)', style: TextStyle(color: muted, fontSize: 10))])),
+              Text.rich(TextSpan(children: [TextSpan(text: 'LKR ${widget.booking?['total_paid'] ?? 0} ', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)), TextSpan(text: '(Paid in Full)', style: TextStyle(color: muted, fontSize: 10))])),
             ],
           ),
           const SizedBox(height: 16),
@@ -121,7 +210,7 @@ class ModifySlotScreen extends StatelessWidget {
               children: const [
                 Icon(Icons.verified_rounded, size: 14, color: AppColors.primary),
                 SizedBox(width: 8),
-                Expanded(child: Text('Free Reschedule Window Active â€¢ Ends at 4:00 PM', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700))),
+                Expanded(child: Text('Free Reschedule Window Active • Ends at 4:00 PM', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700))),
               ],
             ),
           ),
@@ -131,60 +220,101 @@ class ModifySlotScreen extends StatelessWidget {
   }
 
   Widget _buildCalendar() {
+    final days = List.generate(4, (i) => _stripStart.add(Duration(days: i)));
+    final nextMonth = days.last.month != days.first.month ? ' / ${_months[days.last.month - 1].substring(0, 3)}' : '';
     return Column(
       children: [
         Row(
           children: [
-            const Text('October 2024', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+            Text('${_months[days.first.month - 1]} ${days.first.year}', style: const TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(width: 8),
-            const Text('/ Nov', style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
+            Text(nextMonth, style: const TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700)),
             const Spacer(),
-            Container(width: 28, height: 28, decoration: BoxDecoration(color: softBlue, shape: BoxShape.circle), child: const Icon(Icons.chevron_left_rounded, color: ink, size: 18)),
+            _navBtn(Icons.chevron_left_rounded, () => _shift(-4)),
             const SizedBox(width: 8),
-            Container(width: 28, height: 28, decoration: BoxDecoration(color: softBlue, shape: BoxShape.circle), child: const Icon(Icons.chevron_right_rounded, color: ink, size: 18)),
+            _navBtn(Icons.chevron_right_rounded, () => _shift(4)),
           ],
         ),
         const SizedBox(height: 16),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            _dateBox('TODAY', '24', 'Thu', false),
-            _dateBox('FRI', '25', '4 slots', true),
-            _dateBox('SAT', '26', '6 slots', false),
-            _dateBox('SUN', '27', '8 slots', false),
+            for (final d in days)
+              _dateBox(
+                d == _today ? 'TODAY' : _days[d.weekday - 1],
+                '${d.day}',
+                d == _today ? _days[d.weekday - 1][0] + _days[d.weekday - 1].substring(1).toLowerCase() : (d == _date ? '${_opts.where((o) => !_bookedOn(o.id, d)).length} slots' : 'Open'),
+                d == _date,
+                () {
+                  setState(() {
+                    _date = d;
+                    _sel = null;
+                    _taken.clear();
+                  });
+                  _loadTaken();
+                },
+              ),
           ],
         ),
       ],
     );
   }
 
-  Widget _dateBox(String day, String date, String subtitle, bool active) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: BoxDecoration(
-        color: active ? AppColors.primary : Colors.white,
+  bool _bookedOn(int id, DateTime d) => d == _date && _taken.contains(_opts[id].time);
+
+  Widget _navBtn(IconData icon, VoidCallback onTap) {
+    return InkWell(
+      customBorder: const CircleBorder(),
+      onTap: onTap,
+      child: Container(width: 28, height: 28, decoration: const BoxDecoration(color: softBlue, shape: BoxShape.circle), child: Icon(icon, color: ink, size: 18)),
+    );
+  }
+
+  Widget _dateBox(String day, String date, String subtitle, bool active, VoidCallback onTap) {
+    return Material(
+      color: active ? AppColors.primary : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
         borderRadius: BorderRadius.circular(16),
-        border: active ? null : Border.all(color: const Color(0xFFE9EEFF)),
-        boxShadow: active ? [const BoxShadow(color: Color(0x330044FF), blurRadius: 10, offset: Offset(0, 4))] : null,
-      ),
-      child: Column(
-        children: [
-          Text(day, style: TextStyle(color: active ? Colors.white : muted, fontSize: 10, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 4),
-          Text(date, style: TextStyle(color: active ? Colors.white : ink, fontSize: 24, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          if (active)
-            Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)), child: Text(subtitle, style: const TextStyle(color: Colors.white, fontSize: 9)))
-          else
-            Text(subtitle, style: const TextStyle(color: muted, fontSize: 10)),
-        ],
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: active ? null : Border.all(color: const Color(0xFFE9EEFF)),
+            boxShadow: active ? [const BoxShadow(color: Color(0x330044FF), blurRadius: 10, offset: Offset(0, 4))] : null,
+          ),
+          child: Column(
+            children: [
+              Text(day, style: TextStyle(color: active ? Colors.white : muted, fontSize: 10, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text(date, style: TextStyle(color: active ? Colors.white : ink, fontSize: 24, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 4),
+              if (active)
+                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(10)), child: Text(subtitle, style: const TextStyle(color: Colors.white, fontSize: 9)))
+              else
+                Text(subtitle, style: const TextStyle(color: muted, fontSize: 10)),
+            ],
+          ),
+        ),
       ),
     );
   }
 
-  Widget _buildMorningSlots() {
+  Widget _group(Widget header, List<int> ids) {
     return Column(
       children: [
+        header,
+        const SizedBox(height: 16),
+        for (final id in ids) ...[
+          _slotItem(_opts[id]),
+          const SizedBox(height: 12),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildMorningSlots() => _group(
         Row(
           children: const [
             Icon(Icons.wb_sunny_outlined, size: 14, color: muted),
@@ -192,19 +322,10 @@ class ModifySlotScreen extends StatelessWidget {
             Text('MORNING & AFTERNOON', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           ],
         ),
-        const SizedBox(height: 16),
-        _slotItem('08:00 AM - 10:00 AM', 'Court 1 â€¢ 2.0 hrs', null, isBooked: true),
-        const SizedBox(height: 12),
-        _slotItem('10:00 AM - 12:00 PM', 'Court 1 â€¢ 2.0 hrs', 'LKR 5,500', isAvailable: true),
-        const SizedBox(height: 12),
-        _slotItem('02:00 PM - 04:00 PM', 'Court 1 â€¢ 2.0 hrs', 'LKR 5,500', isAvailable: true),
-      ],
-    );
-  }
+        [0, 1, 2],
+      );
 
-  Widget _buildEveningSlots() {
-    return Column(
-      children: [
+  Widget _buildEveningSlots() => _group(
         Row(
           children: const [
             Icon(Icons.bolt_rounded, size: 14, color: AppColors.primary),
@@ -212,68 +333,55 @@ class ModifySlotScreen extends StatelessWidget {
             Text('EVENING PRIME SLOTS', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800, letterSpacing: 0.5)),
           ],
         ),
-        const SizedBox(height: 16),
-        Container(
+        [3, 4, 5],
+      );
+
+  Widget _slotItem(_Opt o) {
+    final isBooked = _bookedOn(o.id, _date);
+    final selected = _sel == o.id;
+    final fg = selected ? Colors.white : ink;
+    return Material(
+      color: selected ? AppColors.primary : Colors.white,
+      borderRadius: BorderRadius.circular(16),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: isBooked ? null : () => setState(() => _sel = o.id),
+        child: Container(
           padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(16), boxShadow: [const BoxShadow(color: Color(0x330044FF), blurRadius: 10, offset: Offset(0, 4))]),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            border: selected ? null : Border.all(color: const Color(0xFFE9EEFF)),
+            boxShadow: selected ? [const BoxShadow(color: Color(0x330044FF), blurRadius: 10, offset: Offset(0, 4))] : null,
+          ),
           child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Container(width: 24, height: 24, decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), shape: BoxShape.circle), child: const Icon(Icons.check_rounded, color: Colors.white, size: 16)),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(o.time, style: TextStyle(color: isBooked ? muted : fg, fontSize: 12, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text('Court 1 • 2.0 hrs', style: TextStyle(color: selected ? Colors.white70 : muted, fontSize: 10)),
+                ],
+              ),
+              if (isBooked)
+                Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(8)), child: const Text('Booked', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)))
+              else
+                Row(
                   children: [
-                    Row(
-                      children: [
-                        const Text('05:00 PM - 07:00\nPM', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w700, height: 1.2)),
-                        const SizedBox(width: 8),
-                        Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(4)), child: const Text('Selected', style: TextStyle(color: Colors.white, fontSize: 9, fontWeight: FontWeight.w700))),
-                      ],
+                    Text(o.price, style: TextStyle(color: fg, fontSize: 12, fontWeight: FontWeight.w800)),
+                    const SizedBox(width: 8),
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(color: selected ? Colors.white24 : softBlue, shape: BoxShape.circle),
+                      child: Icon(selected ? Icons.check_rounded : Icons.add, color: selected ? Colors.white : AppColors.primary, size: 16),
                     ),
-                    const SizedBox(height: 4),
-                    const Text('Court 1 â€¢ Teak Olympic â€¢ 2.0 hrs', style: TextStyle(color: Colors.white70, fontSize: 10)),
                   ],
                 ),
-              ),
-              const Text('LKR\n5,825', style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w800), textAlign: TextAlign.right),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        _slotItem('07:00 PM - 09:00 PM', 'Court 1 â€¢ 2.0 hrs', null, isBooked: true),
-        const SizedBox(height: 12),
-        _slotItem('08:00 PM - 10:00 PM', 'Court 1 â€¢ 2.0 hrs', 'LKR 5,825', isAvailable: true),
-      ],
-    );
-  }
-
-  Widget _slotItem(String time, String desc, String? price, {bool isBooked = false, bool isAvailable = false}) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), border: Border.all(color: const Color(0xFFE9EEFF))),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(time, style: TextStyle(color: isBooked ? muted : ink, fontSize: 12, fontWeight: FontWeight.w700)),
-              const SizedBox(height: 4),
-              Text(desc, style: const TextStyle(color: muted, fontSize: 10)),
-            ],
-          ),
-          if (isBooked)
-            Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6), decoration: BoxDecoration(color: const Color(0xFFF3F4F6), borderRadius: BorderRadius.circular(8)), child: const Text('Booked', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w600)))
-          else if (isAvailable && price != null)
-            Row(
-              children: [
-                Text(price, style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                const SizedBox(width: 8),
-                Container(width: 24, height: 24, decoration: BoxDecoration(color: softBlue, shape: BoxShape.circle), child: const Icon(Icons.add, color: AppColors.primary, size: 16)),
-              ],
-            )
-        ],
       ),
     );
   }
@@ -294,7 +402,7 @@ class ModifySlotScreen extends StatelessWidget {
           const SizedBox(height: 20),
           _summaryRow('Original Booking (24 Oct)', 'LKR 5,825'),
           const SizedBox(height: 12),
-          _summaryRow('New Slot Fee (25 Oct, 5-7 PM)', 'LKR 5,825'),
+          _summaryRow(_sel == null ? 'New Slot Fee (select a slot)' : 'New Slot Fee (${_date.day} ${_months[_date.month - 1].substring(0, 3)}, ${_opts[_sel!].label})', _sel == null ? '-' : _opts[_sel!].price),
           const SizedBox(height: 12),
           _summaryRow('Modification Surcharge', 'LKR 0 (Free Window)', highlight: true),
           const Padding(padding: EdgeInsets.symmetric(vertical: 16), child: Divider(color: Color(0xFFE9EEFF), height: 1)),
@@ -351,6 +459,7 @@ class ModifySlotScreen extends StatelessWidget {
   }
 
   Widget _buildBottomBar(BuildContext context) {
+    final hasSel = _sel != null;
     return Container(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 32),
       decoration: const BoxDecoration(
@@ -364,10 +473,10 @@ class ModifySlotScreen extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Row(
-                children: const [
-                  Icon(Icons.circle, size: 8, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('New Slot: Fri, 25 Oct â€¢ 5:00 PM - 7:00\nPM', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700)),
+                children: [
+                  const Icon(Icons.circle, size: 8, color: AppColors.primary),
+                  const SizedBox(width: 8),
+                  Text(hasSel ? 'New Slot: ${_dateText(_date)} • ${_opts[_sel!].time.replaceAll(' - ', '\n- ')}' : 'Select a new slot', style: const TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700)),
                 ],
               ),
               const Text('LKR 0 Due', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
@@ -377,7 +486,7 @@ class ModifySlotScreen extends StatelessWidget {
           SizedBox(
             width: double.infinity,
             child: FilledButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: (!hasSel || _busy) ? null : _confirm,
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,

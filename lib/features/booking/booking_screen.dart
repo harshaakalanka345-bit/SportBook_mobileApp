@@ -5,9 +5,14 @@ import '../../core/app_theme.dart';
 import 'digital_match_pass_screen.dart';
 import 'modify_slot_screen.dart';
 import 'cancel_booking_screen.dart';
+import 'rate_review_screen.dart';
+import '../auth/booking_history_screen.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
-import '../../core/supabase_service.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
+import '../../core/actions.dart';
+import '../../core/app_config.dart';
 
 class BookingScreen extends StatefulWidget {
   const BookingScreen({super.key});
@@ -17,6 +22,14 @@ class BookingScreen extends StatefulWidget {
 
 class _BookingScreenState extends State<BookingScreen> {
   String _activeTab = 'Upcoming';
+  final _searchCtl = TextEditingController();
+  bool _newestFirst = true;
+
+  @override
+  void dispose() {
+    _searchCtl.dispose();
+    super.dispose();
+  }
 
   final SupabaseService _service = SupabaseService();
   late Future<List<Map<String, dynamic>>> _bookingsFuture;
@@ -55,7 +68,7 @@ class _BookingScreenState extends State<BookingScreen> {
                 _badge('LIVE ENTRY\nREADY'),
               ]),
               const SizedBox(height: 16),
-              TextField(decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, color: muted), hintText: 'Search bookings or venues...', suffixIcon: IconButton(onPressed: () {}, icon: const Icon(Icons.tune_rounded, color: AppColors.primary)), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none))),
+              TextField(controller: _searchCtl, onChanged: (_) => setState(() {}), decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, color: muted), hintText: 'Search bookings or venues...', suffixIcon: IconButton(tooltip: _newestFirst ? 'Newest first' : 'Oldest first', onPressed: () => setState(() => _newestFirst = !_newestFirst), icon: Icon(_newestFirst ? Icons.arrow_downward_rounded : Icons.arrow_upward_rounded, color: AppColors.primary)), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide.none))),
               const SizedBox(height: 13),
               _buildFutureBookings(context),
               const SizedBox(height: 18),
@@ -85,10 +98,21 @@ class _BookingScreenState extends State<BookingScreen> {
           return Center(child: Text('Error: ${snapshot.error}', style: const TextStyle(color: Colors.red)));
         }
         
-        final bookings = snapshot.data ?? [];
+        var bookings = snapshot.data ?? [];
+        final q = _searchCtl.text.trim().toLowerCase();
+        if (q.isNotEmpty) {
+          bookings = bookings.where((b) => '${(b['venues'] as Map?)?['name']} ${b['court_name']} ${b['booking_ref']} ${b['date_schedule']}'.toLowerCase().contains(q)).toList();
+        }
+        if (!_newestFirst) bookings = bookings.reversed.toList();
         
-        final upcomingList = bookings.where((b) => b['status'] != 'Cancelled' && b['status'] != 'Completed').toList();
-        final completedList = bookings.where((b) => b['status'] == 'Completed').toList();
+        bool isPast(Map<String, dynamic> b) {
+          final d = DateTime.tryParse('${b['date_schedule']}');
+          final now = DateTime.now();
+          return d != null && d.isBefore(DateTime(now.year, now.month, now.day));
+        }
+
+        final upcomingList = bookings.where((b) => b['status'] != 'Cancelled' && b['status'] != 'Completed' && !isPast(b)).toList();
+        final completedList = bookings.where((b) => b['status'] == 'Completed' || (b['status'] != 'Cancelled' && isPast(b))).toList();
         final cancelledList = bookings.where((b) => b['status'] == 'Cancelled').toList();
         
         List<Map<String, dynamic>> activeList;
@@ -109,8 +133,9 @@ class _BookingScreenState extends State<BookingScreen> {
             else
               ...activeList.map((b) {
                 final venue = b['venues'] ?? {};
+                const mon = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
                 final dateSplit = (b['date_schedule'] ?? '').toString().split('-');
-                final formattedDate = dateSplit.length == 3 ? '${dateSplit[2]} Oct ${dateSplit[0]}' : b['date_schedule']; 
+                final formattedDate = dateSplit.length == 3 ? '${dateSplit[2]} ${mon[(int.tryParse(dateSplit[1]) ?? 1) - 1]} ${dateSplit[0]}' : b['date_schedule'];
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 16.0),
                   child: _bookingCard(
@@ -123,14 +148,15 @@ class _BookingScreenState extends State<BookingScreen> {
                     price: (b['total_paid'] ?? 0).toString(),
                     status: b['status'] ?? 'Scheduled',
                     ref: b['booking_ref'] ?? '',
+                    booking: b,
                   ),
                 );
               }).toList(),
               
             if (_activeTab == 'Upcoming' && completedList.isNotEmpty) ...[
               const SizedBox(height: 16),
-              Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () {}, child: Text('View History (${completedList.length})'))]),
-              _completedCard(context),
+              Row(children: [const Expanded(child: Text('Recently Completed', style: TextStyle(color: ink, fontSize: 17, fontWeight: FontWeight.w700))), TextButton(onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingHistoryScreen())), child: Text('View History (${completedList.length})'))]),
+              for (final c in completedList.take(3)) _completedCard(context, c),
             ]
           ],
         );
@@ -155,7 +181,7 @@ class _BookingScreenState extends State<BookingScreen> {
     )
   );
 
-  Widget _bookingCard(BuildContext context, {required String name, required String detail, required String date, required String time, required String price, required String status, required String ref, bool primary = false}) {
+  Widget _bookingCard(BuildContext context, {required String name, required String detail, required String date, required String time, required String price, required String status, required String ref, required Map<String, dynamic> booking, bool primary = false}) {
     return Container(
       padding: const EdgeInsets.fromLTRB(17, 17, 17, 14),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(17), border: primary ? const Border(top: BorderSide(color: AppColors.primary, width: 7)) : null, boxShadow: const [BoxShadow(color: Color(0x0C001844), blurRadius: 10, offset: Offset(0, 5))]),
@@ -166,37 +192,65 @@ class _BookingScreenState extends State<BookingScreen> {
         const SizedBox(height: 16),
         Container(padding: const EdgeInsets.all(12), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)), child: Column(children: [Row(children: [const Icon(Icons.event_outlined, color: AppColors.primary, size: 19), const SizedBox(width: 7), Expanded(child: Text(date, style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w600))), const Text('2.0 Hours', style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w700))]), const SizedBox(height: 12), Row(children: [const Icon(Icons.access_time_rounded, color: muted, size: 19), const SizedBox(width: 7), Expanded(child: Text(time, style: const TextStyle(color: muted, fontSize: 17))), Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Text('LKR', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700)), Text(price, style: const TextStyle(color: ink, fontSize: 22, fontWeight: FontWeight.w800)), const Text('Paid in full', style: TextStyle(color: muted, fontSize: 11))])])])),
         const SizedBox(height: 13),
-        Row(children: [const Icon(Icons.location_on_outlined, color: muted, size: 18), const SizedBox(width: 5), const Expanded(child: Text('Maitland Place, Colombo 07', overflow: TextOverflow.ellipsis, style: TextStyle(color: muted, fontSize: 13))), TextButton(onPressed: () {}, child: const Text('Directions →'))]),
+        Row(children: [const Icon(Icons.location_on_outlined, color: muted, size: 18), const SizedBox(width: 5), Expanded(child: Text('${(booking['venues'] as Map?)?['address'] ?? (booking['venues'] as Map?)?['area'] ?? ''}', overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 13))), TextButton(onPressed: () => openDirections('${(booking['venues'] as Map?)?['name'] ?? ''}, ${(booking['venues'] as Map?)?['address'] ?? (booking['venues'] as Map?)?['area'] ?? ''}'), child: const Text('Directions →'))]),
         const SizedBox(height: 4),
         SizedBox(width: double.infinity, child: FilledButton.icon(onPressed: () => _showPass(context, ref), icon: const Icon(Icons.qr_code_2_rounded, size: 20), label: const Text('View Pass & QR Code'), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 13)))),
         const SizedBox(height: 10),
-        Row(children: [Expanded(child: _softButton('▣ Modify Slot', () { Navigator.push(context, MaterialPageRoute(builder: (context) => const ModifySlotScreen())); })), const SizedBox(width: 8), Expanded(child: _softButton('× Cancel', () { Navigator.push(context, MaterialPageRoute(builder: (context) => const CancelBookingScreen())); }, danger: true))]),
+        Row(children: [Expanded(child: _softButton('▣ Modify Slot', () async { await Navigator.push(context, MaterialPageRoute(builder: (context) => ModifySlotScreen(booking: booking))); _loadBookings(); })), const SizedBox(width: 8), Expanded(child: _softButton('× Cancel', () async { await Navigator.push(context, MaterialPageRoute(builder: (context) => CancelBookingScreen(booking: booking))); _loadBookings(); }, danger: true))]),
         const SizedBox(height: 10),
         const Center(child: Text('Free cancellation policy was applicable until 4:00\nPM today', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 12, fontWeight: FontWeight.w600))),
       ]),
     );
   }
 
-  Widget _completedCard(BuildContext context) {
+  Widget _completedCard(BuildContext context, Map<String, dynamic> b) {
     return Container(
       padding: const EdgeInsets.all(15),
       decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [const _StatusTag(label: 'Completed'), const SizedBox(width: 10), const Expanded(child: Text('20 Oct 2024 • 05:00 PM', style: TextStyle(color: muted, fontSize: 13))), const Text('LKR\n3,000', textAlign: TextAlign.right, style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800))]),
+        Row(children: [const _StatusTag(label: 'Completed'), const SizedBox(width: 10), Expanded(child: Text('${b['date_schedule']} • ${b['time_slot']}', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: muted, fontSize: 13))), Text('LKR\n${b['total_paid']}', textAlign: TextAlign.right, style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800))]),
         const SizedBox(height: 12),
-        const Text('Royal Sports Complex', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
-        const Text('Clay Tennis Court A • 1.0 hr match', style: TextStyle(color: muted, fontSize: 13)),
+        Text('${(b['venues'] as Map?)?['name'] ?? 'Venue'}', style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
+        Text('${b['court_name']}', style: const TextStyle(color: muted, fontSize: 13)),
         const SizedBox(height: 12),
-        Row(children: [Expanded(child: _softButton('Re-book Court ⚡', () {})), const SizedBox(width: 8), Expanded(child: _softButton('↓ Invoice', () {}))]),
+        Row(children: [Expanded(child: _softButton('★ Rate & Review', () { Navigator.push(context, MaterialPageRoute(builder: (_) => RateReviewScreen(booking: b))); })), const SizedBox(width: 8), Expanded(child: _softButton('↓ Invoice', () => _showInvoice(context, b)))]),
       ]),
     );
   }
 
-  Widget _supportCard(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(17)), child: Row(children: [Container(width: 42, height: 42, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.support_agent_rounded, color: Colors.white)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Need assistance with\naccess?', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)), Text('24/7 Colombo Sports Authority Hotline', style: TextStyle(color: muted, fontSize: 13))])), FilledButton(onPressed: () {}, style: FilledButton.styleFrom(minimumSize: const Size(64, 36), backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder()), child: const Text('Call'))]));
+  Widget _supportCard(BuildContext context) => Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(17)), child: Row(children: [Container(width: 42, height: 42, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.support_agent_rounded, color: Colors.white)), const SizedBox(width: 12), const Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Need assistance with\naccess?', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700)), Text('24/7 Colombo Sports Authority Hotline', style: TextStyle(color: muted, fontSize: 13))])), FilledButton(onPressed: () => callNumber(AppConfig.supportPhone), style: FilledButton.styleFrom(minimumSize: const Size(64, 36), backgroundColor: AppColors.primary, foregroundColor: Colors.white, shape: const StadiumBorder()), child: const Text('Call'))]));
 
   Widget _status(String label) => Container(padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7), decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(20)), child: Text(label, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)));
 
   Widget _softButton(String label, VoidCallback onPressed, {bool danger = false}) => TextButton(onPressed: onPressed, style: TextButton.styleFrom(backgroundColor: softBlue, foregroundColor: danger ? Colors.redAccent : ink, shape: const StadiumBorder(), padding: const EdgeInsets.symmetric(vertical: 11)), child: Text(label));
+
+  String _invoiceText(Map<String, dynamic> b) {
+    final venue = (b['venues'] as Map?)?['name'] ?? 'Venue';
+    return 'SPORTSBOOK INVOICE\n'
+        'Booking: ${b['booking_ref']}\n'
+        'Venue: $venue\n'
+        'Court: ${b['court_name']}\n'
+        'Date: ${b['date_schedule']}\n'
+        'Time: ${b['time_slot']}\n'
+        'Amount paid: LKR ${b['total_paid']}\n'
+        'Status: ${b['status']}';
+  }
+
+  void _showInvoice(BuildContext context, Map<String, dynamic> b) {
+    final text = _invoiceText(b);
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Invoice', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: SelectableText(text, style: const TextStyle(height: 1.5)),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(onPressed: () { copyText(text, message: 'Invoice copied'); Navigator.pop(ctx); }, child: const Text('Copy')),
+          FilledButton(onPressed: () { shareText(text, subject: 'Invoice ${b['booking_ref']}'); Navigator.pop(ctx); }, child: const Text('Share')),
+        ],
+      ),
+    );
+  }
 
   void _showPass(BuildContext context, String ref) {
     Navigator.push(

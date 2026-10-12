@@ -1,507 +1,721 @@
 import 'package:flutter/material.dart';
-import '../../core/app_theme.dart';
-import 'admin_profile_screen.dart';
-import '../notifications/notifications_screen.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
 
-class AdminLedgerScreen extends StatelessWidget {
+import '../../core/actions.dart';
+import '../../core/app_theme.dart';
+import '../../core/slots.dart';
+import '../../core/supabase_service.dart';
+import '../../core/toast.dart';
+import 'admin_profile_screen.dart';
+
+/// Shift ledger & payouts: revenue intake, rain-check refunds, live ingestion feed, Z-report PDF and shift close.
+class AdminLedgerScreen extends StatefulWidget {
   const AdminLedgerScreen({super.key});
 
+  @override
+  State<AdminLedgerScreen> createState() => _AdminLedgerScreenState();
+}
+
+class _AdminLedgerScreenState extends State<AdminLedgerScreen> {
   static const ink = Color(0xFF11182D);
   static const muted = Color(0xFF697083);
   static const softBlue = Color(0xFFF0F2FF);
+  static const _defaultTarget = 50000.0;
+
+  final _service = SupabaseService();
+  List<Map<String, dynamic>> _venues = [];
+  List<Map<String, dynamic>> _courts = [];
+  List<Map<String, dynamic>> _bookings = [];
+  List<Map<String, dynamic>> _closures = [];
+  String? _venueId;
+  String _period = 'today'; // today | week | month
+  String _feed = 'all'; // all | cards | wallet | cash | app
+  double _target = _defaultTarget;
+  DateTime _loadedAt = DateTime.now();
+  bool _loading = true;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final profile = await _service.getProfile();
+      final prefs = Map<String, dynamic>.from((profile?['preferences'] as Map?) ?? const {});
+      final venues = await _service.getMyVenues();
+      final bookings = await _service.getOwnerBookings();
+      var courts = <Map<String, dynamic>>[];
+      for (final v in venues) {
+        try {
+          courts = [...courts, ...await _service.getVenueCourts(v['id'] as String)];
+        } catch (_) {}
+      }
+      var closures = <Map<String, dynamic>>[];
+      try {
+        closures = await _service.getShiftClosures();
+      } catch (_) {}
+      if (!mounted) return;
+      setState(() {
+        _venues = venues;
+        _courts = courts;
+        _bookings = bookings;
+        _closures = closures;
+        _target = (prefs['revenue_target'] as num?)?.toDouble() ?? _defaultTarget;
+        _loadedAt = DateTime.now();
+        _venueId ??= venues.length == 1 ? venues.first['id'] as String : null;
+      });
+    } catch (e) {
+      if (mounted) setState(() => _error = e.toString());
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  // ------------------------------------------------------------ derived
+
+  DateTime get _from {
+    final n = DateTime.now();
+    final today = DateTime(n.year, n.month, n.day);
+    return switch (_period) {
+      'week' => today.subtract(const Duration(days: 6)),
+      'month' => today.subtract(const Duration(days: 29)),
+      _ => today,
+    };
+  }
+
+  DateTime _created(Map<String, dynamic> b) => (DateTime.tryParse('${b['created_at']}') ?? DateTime.now()).toLocal();
+  double _amount(Map<String, dynamic> b) => (b['total_paid'] as num?)?.toDouble() ?? 0;
+  double _sum(Iterable<Map<String, dynamic>> l) => l.fold(0.0, (s, b) => s + _amount(b));
+
+  Map<String, dynamic>? get _venue => _venueId == null ? null : _venues.firstWhere((v) => v['id'] == _venueId, orElse: () => const {});
+  String get _venueName => (_venue?['name'] as String?) ?? (_venues.isEmpty ? 'No complex' : 'All complexes');
+
+  List<Map<String, dynamic>> get _scoped => _bookings.where((b) => _venueId == null || b['venue_id'] == _venueId).toList();
+  List<Map<String, dynamic>> get _inPeriod => _scoped.where((b) => !_created(b).isBefore(_from)).toList();
+  List<Map<String, dynamic>> get _paid => _inPeriod.where((b) => b['status'] != 'Cancelled').toList();
+  List<Map<String, dynamic>> get _pendingRefunds => _scoped.where((b) => b['status'] == 'Cancelled' && b['refunded_at'] == null && _amount(b) > 0).toList();
+
+  /// cash | cards | wallet | app
+  String _kind(Map<String, dynamic> b) {
+    if (b['source'] == 'walk_in') {
+      return switch ('${b['payment_method']}') {
+        'cash' => 'cash',
+        'wallet' => 'wallet',
+        _ => 'cards',
+      };
+    }
+    return 'app';
+  }
+
+  String _kindLabel(String k) => switch (k) {
+        'cash' => 'Cash drawer',
+        'wallet' => 'Athlete wallet',
+        'cards' => 'Cards & LankaPay',
+        _ => 'App payments',
+      };
+
+  Map<String, double> get _byKind {
+    final m = {'cards': 0.0, 'wallet': 0.0, 'cash': 0.0, 'app': 0.0};
+    for (final b in _paid) {
+      m[_kind(b)] = m[_kind(b)]! + _amount(b);
+    }
+    return m;
+  }
+
+  String _money(num v) => v.toStringAsFixed(0).replaceAllMapped(RegExp(r'\B(?=(\d{3})+(?!\d))'), (m) => ',');
+
+  String get _periodLabel => switch (_period) {
+        'week' => 'Last 7 days',
+        'month' => 'Last 30 days',
+        _ => 'Today, ${isoDate(DateTime.now())}',
+      };
+
+  // ------------------------------------------------------------ actions
+
+  Future<void> _editTarget() async {
+    final c = TextEditingController(text: _target.toStringAsFixed(0));
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Revenue target', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: TextField(controller: c, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Target for the selected period (LKR)', prefixText: 'LKR ')),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Save'))],
+      ),
+    );
+    final v = double.tryParse(c.text.trim());
+    c.dispose();
+    if (ok != true || v == null || v <= 0) return;
+    setState(() => _target = v);
+    try {
+      await _service.updatePreferences({'revenue_target': v});
+    } catch (e) {
+      toast('Could not save target: $e');
+    }
+  }
+
+  Future<void> _refund(Map<String, dynamic> b) async {
+    final canWallet = b['user_id'] != null;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Refund booking', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Text('Refund LKR ${_money(_amount(b))} for ${b['booking_ref']}?\n\n'
+            '${canWallet ? 'Wallet: credited instantly to the athlete (0 fee).\n' : 'Guest booking: no wallet - refund in cash.\n'}'
+            'Card gateway reversal takes 2-3 banking days; mark it done once you have processed it.'),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, 'card'), child: Text(canWallet ? 'Card gateway reversal' : 'Cash refunded')),
+          if (canWallet) FilledButton(onPressed: () => Navigator.pop(ctx, 'wallet'), child: const Text('Refund to wallet')),
+        ],
+      ),
+    );
+    if (choice == null) return;
+    try {
+      await _service.refundBooking(b, toWallet: choice == 'wallet');
+      toast(choice == 'wallet' ? 'Refunded to athlete wallet (instant)' : 'Marked as refunded');
+      await _load();
+    } catch (e) {
+      toast('Refund failed: $e');
+    }
+  }
+
+  Future<void> _refundAllToWallets() async {
+    final list = _pendingRefunds.where((b) => b['user_id'] != null).toList();
+    if (list.isEmpty) {
+      toast('No refunds can go to a wallet.');
+      return;
+    }
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Refund all to wallets?', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: Text('Credit LKR ${_money(_sum(list))} back to ${list.length} athlete wallet${list.length == 1 ? '' : 's'}.'),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Refund all'))],
+      ),
+    );
+    if (ok != true) return;
+    var done = 0;
+    for (final b in list) {
+      try {
+        await _service.refundBooking(b, toWallet: true);
+        done++;
+      } catch (_) {}
+    }
+    toast('Refunded $done of ${list.length}.');
+    await _load();
+  }
+
+  Future<void> _weatherVoid() async {
+    if (_venues.isEmpty || _courts.isEmpty) {
+      toast('Register a complex with courts first.');
+      return;
+    }
+    final today = isoDate(DateTime.now());
+    final venueIds = _venueId == null ? _venues.map((v) => v['id']).toSet() : {_venueId};
+    final names = _courts.where((c) => venueIds.contains(c['venue_id'])).map((c) => '${c['name']}').toSet().toList();
+    final selected = <String>{};
+    var reason = 'Weather void';
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setLocal) => AlertDialog(
+          title: const Text('Rain-Check Action', style: TextStyle(fontWeight: FontWeight.w800)),
+          content: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Text('Cancels all of today\'s remaining bookings on the selected courts and queues them for refund.', style: TextStyle(color: muted, fontSize: 12)),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: [for (final n in names) FilterChip(label: Text(n), selected: selected.contains(n), onSelected: (v) => setLocal(() => v ? selected.add(n) : selected.remove(n)))]),
+              const SizedBox(height: 8),
+              Wrap(spacing: 8, children: [for (final r in const ['Weather void', 'Maintenance', 'Power outage']) ChoiceChip(label: Text(r), selected: reason == r, onSelected: (_) => setLocal(() => reason = r))]),
+            ]),
+          ),
+          actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: selected.isEmpty ? null : () => Navigator.pop(ctx, true), child: const Text('Void & queue refunds'))],
+        ),
+      ),
+    );
+    if (ok != true) return;
+    final now = DateTime.now();
+    final targets = _scoped.where((b) {
+      if (b['status'] == 'Cancelled' || b['date_schedule'] != today || !selected.contains('${b['court_name']}')) return false;
+      final labels = '${b['time_slot']}'.split(', ');
+      final slots = kSlots.where((s) => labels.contains(s.label)).toList();
+      return slots.isEmpty || slots.last.endOn(now).isAfter(now);
+    }).toList();
+    if (targets.isEmpty) {
+      toast('No remaining bookings on those courts today.');
+      return;
+    }
+    var done = 0;
+    for (final b in targets) {
+      try {
+        await _service.cancelBooking('${b['booking_ref']}', reason: reason);
+        done++;
+      } catch (_) {}
+    }
+    toast('$done booking${done == 1 ? '' : 's'} voided - refunds are in the queue.');
+    await _load();
+  }
+
+  Future<List<int>> _buildPdf() async {
+    final paid = _paid;
+    final by = _byKind;
+    final doc = pw.Document();
+    doc.addPage(
+      pw.MultiPage(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(32),
+        build: (ctx) => [
+          pw.Text('SportsBook - Z Report', style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 4),
+          pw.Text('$_venueName  |  $_periodLabel'),
+          pw.Text('Generated ${DateTime.now().toLocal().toString().substring(0, 16)}'),
+          pw.SizedBox(height: 16),
+          pw.Text('Revenue: LKR ${_money(_sum(paid))}  (${paid.length} bookings)', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 8),
+          pw.TableHelper.fromTextArray(
+            headers: ['Method', 'Amount (LKR)'],
+            data: [for (final k in ['cards', 'wallet', 'cash', 'app']) [_kindLabel(k), _money(by[k]!)]],
+          ),
+          pw.SizedBox(height: 8),
+          pw.Text('Refunds pending: ${_pendingRefunds.length} (LKR ${_money(_sum(_pendingRefunds))})'),
+          pw.SizedBox(height: 16),
+          pw.Text('Transactions', style: pw.TextStyle(fontSize: 14, fontWeight: pw.FontWeight.bold)),
+          pw.SizedBox(height: 6),
+          pw.TableHelper.fromTextArray(
+            headers: ['Ref', 'Court', 'Date', 'Slot', 'Method', 'Status', 'LKR'],
+            cellStyle: const pw.TextStyle(fontSize: 8),
+            data: [for (final b in _inPeriod) ['${b['booking_ref']}', '${b['court_name']}', '${b['date_schedule']}', '${b['time_slot']}', _kindLabel(_kind(b)), '${b['status']}', _money(_amount(b))]],
+          ),
+        ],
+      ),
+    );
+    return doc.save();
+  }
+
+  Future<void> _exportPdf() async {
+    if (_inPeriod.isEmpty) {
+      toast('Nothing to export for this period.');
+      return;
+    }
+    try {
+      final bytes = await _buildPdf();
+      await shareFileBytes(bytes, 'z-report-${isoDate(DateTime.now())}.pdf', 'application/pdf', text: 'SportsBook Z report');
+    } catch (e) {
+      toast('Could not build the PDF: $e');
+    }
+  }
+
+  Future<void> _exportCsv() async {
+    if (_inPeriod.isEmpty) {
+      toast('Nothing to export for this period.');
+      return;
+    }
+    final rows = <String>['booking_ref,venue,court,date,time_slot,amount_lkr,status,method,created_at'];
+    String esc(Object? v) => '"${'${v ?? ''}'.replaceAll('"', '""')}"';
+    for (final b in _inPeriod) {
+      rows.add([b['booking_ref'], (b['venues'] as Map?)?['name'], b['court_name'], b['date_schedule'], b['time_slot'], b['total_paid'], b['status'], _kindLabel(_kind(b)), b['created_at']].map(esc).join(','));
+    }
+    await shareText(rows.join('\n'), subject: 'SportsBook ledger ${isoDate(DateTime.now())}');
+  }
+
+  Future<void> _closeShift() async {
+    final today = isoDate(DateTime.now());
+    final targetVenue = _venueId ?? (_venues.length == 1 ? _venues.first['id'] as String : null);
+    if (targetVenue == null) {
+      toast('Pick a single complex (top of the page) before closing its shift.');
+      return;
+    }
+    final pending = _pendingRefunds.where((b) => b['venue_id'] == targetVenue).length;
+    final shift = _bookings.where((b) => b['venue_id'] == targetVenue && isoDate(_created(b)) == today).toList();
+    final live = shift.where((b) => b['status'] != 'Cancelled').toList();
+    final cash = _sum(live.where((b) => _kind(b) == 'cash'));
+    final digital = _sum(live) - cash;
+    final refunds = _sum(_scoped.where((b) => b['venue_id'] == targetVenue && b['refunded_at'] != null && isoDate(DateTime.tryParse('${b['refunded_at']}')?.toLocal() ?? DateTime(2000)) == today));
+    final counted = TextEditingController();
+    final note = TextEditingController();
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Reconcile & Close Shift', style: TextStyle(fontWeight: FontWeight.w800)),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('${live.length} bookings today\nCash expected: LKR ${_money(cash)}\nCards / wallet / app: LKR ${_money(digital)}\nRefunds paid: LKR ${_money(refunds)}', style: const TextStyle(height: 1.6)),
+            if (pending > 0) Padding(padding: const EdgeInsets.only(top: 8), child: Text('$pending refund${pending == 1 ? ' is' : 's are'} still pending.', style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w700, fontSize: 12))),
+            const SizedBox(height: 12),
+            TextField(controller: counted, keyboardType: TextInputType.number, decoration: const InputDecoration(labelText: 'Cash counted in drawer (LKR)')),
+            TextField(controller: note, decoration: const InputDecoration(labelText: 'Note (optional)')),
+          ]),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')), FilledButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Close shift'))],
+      ),
+    );
+    final countedValue = double.tryParse(counted.text.trim());
+    final noteText = note.text.trim();
+    counted.dispose();
+    note.dispose();
+    if (ok != true) return;
+    try {
+      await _service.closeShift(venueId: targetVenue, shiftDate: today, bookingsCount: live.length, cashTotal: cash, digitalTotal: digital, refundsTotal: refunds, countedCash: countedValue, note: noteText.isEmpty ? null : noteText);
+      final diff = countedValue == null ? null : countedValue - cash;
+      toast(diff == null ? 'Shift closed.' : (diff == 0 ? 'Shift closed - drawer balanced.' : 'Shift closed - drawer is ${diff > 0 ? 'over' : 'short'} by LKR ${_money(diff.abs())}.'));
+      await _load();
+    } catch (e) {
+      toast('Could not close shift: $e');
+    }
+  }
+
+  // ------------------------------------------------------------ build
 
   @override
   Widget build(BuildContext context) {
+    final pending = _pendingRefunds;
     return Scaffold(
       backgroundColor: const Color(0xFFFAF8FF),
       body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
-          children: [
-            _buildAppBar(),
-            const SizedBox(height: 20),
-            _buildHeaderCard(),
-            const SizedBox(height: 20),
-            _buildRevenueCard(),
-            const SizedBox(height: 24),
-            _buildRainCheckSection(),
-            const SizedBox(height: 24),
-            _buildIngestionFeed(),
-            const SizedBox(height: 24),
-            _buildVaultProtocol(),
-          ],
+        child: RefreshIndicator(
+          onRefresh: _load,
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+            children: [
+              _appBar(),
+              const SizedBox(height: 14),
+              if (_error != null)
+                Padding(padding: const EdgeInsets.only(top: 40), child: Column(children: [Text('Could not load the ledger\n$_error', textAlign: TextAlign.center, style: const TextStyle(color: muted)), TextButton(onPressed: _load, child: const Text('Retry'))]))
+              else if (!_loading && _venues.isEmpty)
+                const Padding(padding: EdgeInsets.only(top: 50), child: Center(child: Text('Register a complex to see its ledger.', style: TextStyle(color: muted))))
+              else ...[
+                _headerCard(),
+                const SizedBox(height: 14),
+                _revenueCard(),
+                const SizedBox(height: 22),
+                _rainCheck(pending),
+                const SizedBox(height: 22),
+                _feedSection(),
+                const SizedBox(height: 22),
+                _vault(pending.length),
+                if (_closures.isNotEmpty) ...[
+                  const SizedBox(height: 18),
+                  const Text('RECENT SHIFT CLOSURES', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 8),
+                  for (final c in _closures.take(5))
+                    Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE9EEFF))),
+                      child: Row(children: [
+                        Expanded(child: Text('${c['shift_date']} • ${(c['venues'] as Map?)?['name'] ?? ''}\n${c['bookings_count']} bookings • cash LKR ${_money((c['cash_total'] as num?) ?? 0)}${c['counted_cash'] != null ? ' (counted ${_money(c['counted_cash'] as num)})' : ''}', style: const TextStyle(color: muted, fontSize: 12, height: 1.4))),
+                        const Icon(Icons.check_circle, color: Colors.green, size: 18),
+                      ]),
+                    ),
+                ],
+              ],
+              if (_loading) const Padding(padding: EdgeInsets.only(top: 16), child: LinearProgressIndicator(minHeight: 2)),
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAppBar() {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-          child: const Icon(Icons.inventory_2_outlined, color: AppColors.primary, size: 16),
-        ),
+  Widget _appBar() => Row(children: [
+        Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(10)), child: const Icon(Icons.account_balance_wallet_rounded, color: Colors.white, size: 18)),
         const SizedBox(width: 12),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Text('APEX CENTER - SHIFT #402', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-              Text('Shift Ledger & Payouts', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
-            ],
-          ),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text(_venues.isEmpty ? 'OWNER CONSOLE' : '${_venueName.toUpperCase()} • LEDGER', maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
+            const Text('Shift Ledger & Payouts', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+          ]),
         ),
-        Builder(
-          builder: (ctx) => Row(
-            children: [
-              IconButton(
-                onPressed: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const NotificationsScreen())),
-                icon: const Icon(Icons.notifications_none_rounded, color: ink, size: 20),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-              ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: () => Navigator.push(ctx, MaterialPageRoute(builder: (_) => const AdminProfileScreen())),
-                child: Container(
-                  width: 28,
-                  height: 28,
-                  decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                  child: const Icon(Icons.person, color: Colors.white, size: 16),
-                ),
-              ),
-            ],
-          ),
+        IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded, color: ink)),
+        GestureDetector(
+          onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminProfileScreen())),
+          child: Container(width: 34, height: 34, decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.person, color: Colors.white, size: 18)),
         ),
-      ],
-    );
-  }
+      ]);
 
-  Widget _buildHeaderCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFFE5EDFF), borderRadius: BorderRadius.circular(16)),
-                child: Row(
-                  children: const [
-                    Icon(Icons.circle, color: AppColors.primary, size: 6),
-                    SizedBox(width: 6),
-                    Text('SHIFT 02 • EVENING', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: () {},
-                icon: const Icon(Icons.download, size: 12, color: AppColors.primary),
-                label: const Text('Export Z-PDF', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: softBlue),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  minimumSize: Size.zero,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          Row(
-            children: const [
-              Text('CSA National Arena', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-              Text(' • Colombo • ', style: TextStyle(color: ink, fontSize: 11)),
-              Text('Drawer #01', style: TextStyle(color: muted, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Today, 24 Oct (16:00 -\n23:00)', style: TextStyle(color: muted, fontSize: 10, height: 1.3)),
-              Row(
-                children: const [
-                  Icon(Icons.sync, color: AppColors.primary, size: 12),
-                  SizedBox(width: 4),
-                  Text('Ledger Synced (Audit\nv2.4)', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700, height: 1.2)),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
+  Widget _card({required Widget child, EdgeInsets padding = const EdgeInsets.all(16)}) => Container(
+        padding: padding,
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
+        child: child,
+      );
 
-  Widget _buildRevenueCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: softBlue, width: 2),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('SHIFT REVENUE INTAKE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFE5EDFF), borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                  children: const [
-                    Icon(Icons.trending_up, color: AppColors.primary, size: 10),
-                    SizedBox(width: 4),
-                    Text('Target Met 112%', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-                  ],
-                ),
-              ),
-            ],
+  Widget _headerCard() {
+    final secs = DateTime.now().difference(_loadedAt).inSeconds;
+    return _card(
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)), child: Text(_period == 'today' ? 'CURRENT SHIFT' : (_period == 'week' ? '7-DAY VIEW' : '30-DAY VIEW'), style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800))),
+          const Spacer(),
+          OutlinedButton.icon(
+            onPressed: _exportPdf,
+            icon: const Icon(Icons.picture_as_pdf_outlined, size: 14),
+            label: const Text('Export Z-PDF', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(foregroundColor: AppColors.primary, side: const BorderSide(color: Color(0xFFD6E0FF)), shape: const StadiumBorder()),
           ),
-          const SizedBox(height: 8),
-          const Text('LKR 84,250', style: TextStyle(color: ink, fontSize: 28, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 4),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
-              Icon(Icons.check_circle_outline, color: AppColors.primary, size: 12),
-              SizedBox(width: 4),
-              Expanded(child: Text('48 Transactions Processed • Cash in Drawer\nVerified', style: TextStyle(color: muted, fontSize: 9, height: 1.3))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          ClipRRect(
-            borderRadius: BorderRadius.circular(4),
-            child: Row(
-              children: [
-                Expanded(flex: 65, child: Container(height: 6, color: const Color(0xFF0D6EFD))),
-                const SizedBox(width: 2),
-                Expanded(flex: 25, child: Container(height: 6, color: const Color(0xFF3B82F6))),
-                const SizedBox(width: 2),
-                Expanded(flex: 10, child: Container(height: 6, color: const Color(0xFF94A3B8))),
+        ]),
+        const SizedBox(height: 12),
+        if (_venues.length > 1)
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(children: [
+              ChoiceChip(label: const Text('All complexes'), selected: _venueId == null, showCheckmark: false, selectedColor: AppColors.primary, labelStyle: TextStyle(color: _venueId == null ? Colors.white : ink, fontWeight: FontWeight.w600), onSelected: (_) => setState(() => _venueId = null)),
+              for (final v in _venues) ...[
+                const SizedBox(width: 8),
+                ChoiceChip(label: Text('${v['name']}'), selected: _venueId == v['id'], showCheckmark: false, selectedColor: AppColors.primary, labelStyle: TextStyle(color: _venueId == v['id'] ? Colors.white : ink, fontWeight: FontWeight.w600), onSelected: (_) => setState(() => _venueId = v['id'] as String)),
               ],
+            ]),
+          )
+        else
+          Text('${_venueName} • ${_venue?['area'] ?? ''}', style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 10),
+        Row(children: [
+          for (final p in const [('today', 'Today'), ('week', '7 days'), ('month', '30 days')]) ...[
+            ChoiceChip(label: Text(p.$2), selected: _period == p.$1, showCheckmark: false, selectedColor: AppColors.primary, labelStyle: TextStyle(color: _period == p.$1 ? Colors.white : ink, fontWeight: FontWeight.w600), onSelected: (_) => setState(() => _period = p.$1)),
+            const SizedBox(width: 8),
+          ],
+        ]),
+        const SizedBox(height: 10),
+        Row(children: [
+          Expanded(child: Text(_periodLabel, style: const TextStyle(color: muted, fontSize: 11))),
+          const Icon(Icons.verified_outlined, size: 14, color: AppColors.primary),
+          const SizedBox(width: 4),
+          Text('Ledger synced ${secs < 60 ? '${secs}s' : '${secs ~/ 60}m'} ago', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _revenueCard() {
+    final total = _sum(_paid);
+    final pct = _target <= 0 ? 0 : (total * 100 / _target).round();
+    final by = _byKind;
+    final cardsShare = by['cards']! + by['app']!;
+    double share(double v) => total == 0 ? 0 : v * 100 / total;
+    return _card(
+      padding: const EdgeInsets.all(18),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Expanded(child: Text('REVENUE INTAKE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800))),
+          InkWell(
+            onTap: _editTarget,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
+              child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Icon(pct >= 100 ? Icons.flag : Icons.flag_outlined, size: 12, color: AppColors.primary),
+                const SizedBox(width: 4),
+                Text(pct >= 100 ? 'Target met $pct%' : '$pct% of target', style: const TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
+                const SizedBox(width: 4),
+                const Icon(Icons.edit_outlined, size: 11, color: AppColors.primary),
+              ]),
             ),
           ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              Expanded(child: _buildRevenueMetric('Cards & La...', 'LKR\n54,762', '65% of shift', const Color(0xFF0D6EFD))),
-              const SizedBox(width: 8),
-              Expanded(child: _buildRevenueMetric('Athlete Wa...', 'LKR\n21,063', '25% of shift', const Color(0xFF3B82F6))),
-              const SizedBox(width: 8),
-              Expanded(child: _buildRevenueMetric('Cash Draw...', 'LKR\n8,425', '10% in till', const Color(0xFF94A3B8), isMuted: true)),
-            ],
-          ),
-        ],
-      ),
+        ]),
+        const SizedBox(height: 6),
+        Text('LKR ${_money(total)}', style: const TextStyle(color: ink, fontSize: 30, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        ClipRRect(borderRadius: BorderRadius.circular(6), child: LinearProgressIndicator(value: (pct / 100).clamp(0.0, 1.0).toDouble(), minHeight: 8, backgroundColor: softBlue, color: AppColors.primary)),
+        const SizedBox(height: 8),
+        Text('${_paid.length} transactions processed • target LKR ${_money(_target)}', style: const TextStyle(color: muted, fontSize: 10)),
+        const SizedBox(height: 14),
+        Row(children: [
+          Expanded(child: _metric('Cards & LankaPay', cardsShare, '${share(cardsShare).round()}% of total', const Color(0xFF0D6EFD))),
+          const SizedBox(width: 8),
+          Expanded(child: _metric('Athlete Wallet', by['wallet']!, '${share(by['wallet']!).round()}% of total', const Color(0xFF3B82F6))),
+          const SizedBox(width: 8),
+          Expanded(child: _metric('Cash Drawer', by['cash']!, '${share(by['cash']!).round()}% in till', const Color(0xFF94A3B8), isMuted: true)),
+        ]),
+      ]),
     );
   }
 
-  Widget _buildRevenueMetric(String title, String value, String percent, Color dotColor, {bool isMuted = false}) {
-    return Container(
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Icon(Icons.circle, color: dotColor, size: 6),
-              const SizedBox(width: 4),
-              Expanded(child: Text(title, style: const TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w800), overflow: TextOverflow.ellipsis)),
-            ],
-          ),
+  Widget _metric(String title, double value, String sub, Color dot, {bool isMuted = false}) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(color: const Color(0xFFF8F9FD), borderRadius: BorderRadius.circular(14)),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(children: [Container(width: 6, height: 6, decoration: BoxDecoration(color: dot, shape: BoxShape.circle)), const SizedBox(width: 4), Expanded(child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w800)))]),
           const SizedBox(height: 6),
-          Text(value, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800, height: 1.2)),
-          const SizedBox(height: 2),
-          Text(percent, style: TextStyle(color: isMuted ? muted : AppColors.primary, fontSize: 9)),
+          Text('LKR\n${_money(value)}', style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800, height: 1.2)),
+          const SizedBox(height: 4),
+          Text(sub, style: TextStyle(color: isMuted ? muted : AppColors.primary, fontSize: 9)),
+        ]),
+      );
+
+  Widget _rainCheck(List<Map<String, dynamic>> pending) {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Expanded(child: Text('Rain-Check Action', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800))),
+        Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: pending.isEmpty ? softBlue : const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(12)), child: Text('${pending.length} pending', style: TextStyle(color: pending.isEmpty ? AppColors.primary : const Color(0xFFE11D48), fontSize: 10, fontWeight: FontWeight.w800))),
+      ]),
+      const SizedBox(height: 10),
+      Row(children: [
+        Expanded(child: OutlinedButton.icon(onPressed: _weatherVoid, icon: const Icon(Icons.thunderstorm_outlined, size: 16), label: const Text('Declare weather void'), style: OutlinedButton.styleFrom(foregroundColor: ink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 12)))),
+        if (pending.length > 1) ...[
+          const SizedBox(width: 8),
+          Expanded(child: FilledButton.icon(onPressed: _refundAllToWallets, icon: const Icon(Icons.account_balance_wallet_outlined, size: 16), label: const Text('Refund all'), style: FilledButton.styleFrom(backgroundColor: AppColors.primary, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)), padding: const EdgeInsets.symmetric(vertical: 12)))),
         ],
-      ),
-    );
+      ]),
+      const SizedBox(height: 10),
+      if (pending.isEmpty)
+        const Text('No cancelled bookings waiting for a refund.', style: TextStyle(color: muted, fontSize: 13))
+      else
+        for (final b in pending) _refundCard(b),
+    ]);
   }
 
-  Widget _buildRainCheckSection() {
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            const Text('Rain-Check\nAction', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800, height: 1.1)),
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-              decoration: BoxDecoration(color: const Color(0xFFFFE4E6), borderRadius: BorderRadius.circular(12)),
-              child: const Text('1\nPending', style: TextStyle(color: Color(0xFFE11D48), fontSize: 8, fontWeight: FontWeight.w800, height: 1.2), textAlign: TextAlign.center),
-            ),
-            const Spacer(),
-            const Text('SLA: 12m\nremaining', style: TextStyle(color: muted, fontSize: 10, height: 1.2), textAlign: TextAlign.right),
-          ],
-        ),
-        const SizedBox(height: 16),
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))]),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: const [
-                        Text('#SB-COL-8921 • Tennis\nCourt B', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800, height: 1.2)),
-                        SizedBox(height: 4),
-                        Text('Logged 18 mins ago via Ground\nMarshal', style: TextStyle(color: muted, fontSize: 9, height: 1.3)),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                    decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-                    child: Row(
-                      children: const [
-                        Icon(Icons.cloudy_snowing, color: AppColors.primary, size: 12),
-                        SizedBox(width: 4),
-                        Text('Weather\nVoid', style: TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w800, height: 1.2)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(12)),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: const BoxDecoration(color: Color(0xFFE5EDFF), shape: BoxShape.circle),
-                      child: const Center(child: Text('DS', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800))),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('Dilhara Senanayake', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                          Text('+94 71 882 1094 • Pro Tier', style: TextStyle(color: muted, fontSize: 9)),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: const [
-                        Text('REFUND DUE', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800)),
-                        Text('LKR 3,200', style: TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800)),
-                      ],
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: FilledButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.currency_exchange, size: 14),
-                  label: const Text('Refund to Athlete Wallet (Instant • 0\nFee)', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, height: 1.2), textAlign: TextAlign.center),
-                  style: FilledButton.styleFrom(
-                    backgroundColor: const Color(0xFF0D6EFD),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 8),
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: () {},
-                  icon: const Icon(Icons.credit_card, size: 14, color: ink),
-                  label: const Text('Card Gateway Reversal (2–3 Banking\nDays)', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700, height: 1.2), textAlign: TextAlign.center),
-                  style: OutlinedButton.styleFrom(
-                    backgroundColor: softBlue,
-                    side: BorderSide.none,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildIngestionFeed() {
-    return Column(
-      children: [
-        Row(
-          children: [
-            const Text('Shift Ingestion\nFeed', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800, height: 1.1)),
-            const SizedBox(width: 12),
-            Row(
-              children: const [
-                Icon(Icons.circle, color: AppColors.primary, size: 6),
-                SizedBox(width: 4),
-                Text('Live (12s\nago)', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800, height: 1.2)),
-              ],
-            ),
-            const Spacer(),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xFFF8F9FA), borderRadius: BorderRadius.circular(16)),
-              child: Row(
-                children: const [
-                  Icon(Icons.filter_list, color: muted, size: 12),
-                  SizedBox(width: 6),
-                  Text('ALL\n(48)', style: TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w800, height: 1.2), textAlign: TextAlign.center),
-                ],
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        _feedRow(
-          icon: Icons.public, // Representing visa/mastercard globe
-          title: '#8941 • Kasun P.',
-          pill: 'Court 1',
-          subtitle: 'Visa Card (•••• 4812) • 18:02',
-          amount: '+LKR 5,825',
-          status: 'Cleared',
-        ),
-        _feedRow(
-          icon: Icons.inventory_2, // Drawer
-          title: '#8942 • Sahan P.',
-          pill: 'Walk-In',
-          subtitle: 'Counter Cash (Drawer 01) • 18...',
-          amount: '+LKR 2,450',
-          status: 'Cleared',
-        ),
-        _feedRow(
-          icon: Icons.sports_tennis,
-          title: 'Add-On • Yonex Rackets x2',
-          pill: null,
-          subtitle: 'LankaPay Dynamic QR • 18:25',
-          amount: '+LKR 700',
-          status: 'Cleared',
-        ),
-        _feedRow(
-          icon: Icons.lock_outline,
-          title: 'Locker #14 & #15',
-          pill: 'Kasun P.',
-          subtitle: 'Athlete Wallet Bal • 18:05',
-          amount: '+LKR 300',
-          status: 'Auto-Settled',
-        ),
-      ],
-    );
-  }
-
-  Widget _feedRow({required IconData icon, required String title, String? pill, required String subtitle, required String amount, required String status}) {
+  Widget _refundCard(Map<String, dynamic> b) {
+    final canWallet = b['user_id'] != null;
+    final reason = (b['cancel_reason'] as String?) ?? 'Cancelled';
+    final name = (b['guest_name'] as String?)?.isNotEmpty ?? false ? '${b['guest_name']}' : (canWallet ? 'SportsBook member' : 'Guest');
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 4, offset: Offset(0, 2))]),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-            child: Icon(icon, color: AppColors.primary, size: 16),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(title, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800)),
-                    if (pill != null) ...[
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(4)),
-                        child: Text(pill, style: const TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w700)),
-                      ),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(subtitle, style: const TextStyle(color: muted, fontSize: 9)),
-              ],
-            ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(amount, style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
-              const SizedBox(height: 2),
-              Text(status, style: const TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w700)),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildVaultProtocol() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16), boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))]),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              const Icon(Icons.shield_outlined, color: AppColors.primary, size: 16),
-              const SizedBox(width: 8),
-              const Expanded(child: Text('Vault Reconciliation Protocol', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800))),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(color: const Color(0xFFD0DDFB), borderRadius: BorderRadius.circular(12)),
-                child: const Text('Ready', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w800)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Text('Closing ledger seals turnstiles, verifies cash in\nDrawer #01, and hashes shift telemetry directly to\nthe Colombo Sports Authority Treasury ledger.', style: TextStyle(color: muted, fontSize: 10, height: 1.4)),
-          const SizedBox(height: 16),
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE9EEFF))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Expanded(child: Text('#${b['booking_ref']} • ${b['court_name']}', style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800))),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)), child: Text(reason.toUpperCase(), style: const TextStyle(color: ink, fontSize: 8, fontWeight: FontWeight.w800))),
+        ]),
+        Text('${b['date_schedule']} • ${b['time_slot']}', style: const TextStyle(color: muted, fontSize: 10)),
+        const SizedBox(height: 10),
+        Row(children: [
+          CircleAvatar(radius: 16, backgroundColor: softBlue, child: Text(name.isEmpty ? '?' : name[0].toUpperCase(), style: const TextStyle(color: AppColors.primary, fontWeight: FontWeight.w800, fontSize: 12))),
+          const SizedBox(width: 10),
+          Expanded(child: Text(name, style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800))),
+          Column(crossAxisAlignment: CrossAxisAlignment.end, children: [const Text('REFUND DUE', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800)), Text('LKR ${_money(_amount(b))}', style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800))]),
+        ]),
+        const SizedBox(height: 12),
+        if (canWallet)
           SizedBox(
             width: double.infinity,
             child: FilledButton.icon(
-              onPressed: () {},
-              icon: const Icon(Icons.lock_outline, size: 14, color: Colors.white),
-              label: const Text('Reconcile & Close Evening Shift', style: TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.w700)),
-              style: FilledButton.styleFrom(
-                backgroundColor: ink,
-                padding: const EdgeInsets.symmetric(vertical: 14),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
+              onPressed: () async {
+                try {
+                  await _service.refundBooking(b, toWallet: true);
+                  toast('Refunded to athlete wallet (instant)');
+                  await _load();
+                } catch (e) {
+                  toast('Refund failed: $e');
+                }
+              },
+              icon: const Icon(Icons.currency_exchange, size: 14),
+              label: const Text('Refund to Athlete Wallet (Instant • 0 Fee)', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+              style: FilledButton.styleFrom(backgroundColor: AppColors.primary, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
             ),
           ),
-        ],
+        const SizedBox(height: 8),
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () async {
+              try {
+                await _service.refundBooking(b, toWallet: false);
+                toast(canWallet ? 'Card reversal recorded (2-3 banking days)' : 'Cash refund recorded');
+                await _load();
+              } catch (e) {
+                toast('Could not record refund: $e');
+              }
+            },
+            icon: Icon(canWallet ? Icons.credit_card : Icons.payments_outlined, size: 14),
+            label: Text(canWallet ? 'Card Gateway Reversal (2-3 Banking Days)' : 'Cash Refunded at Counter', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
+            style: OutlinedButton.styleFrom(foregroundColor: ink, padding: const EdgeInsets.symmetric(vertical: 12), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14))),
+          ),
+        ),
+      ]),
+    );
+  }
+
+  Widget _feedSection() {
+    final all = _inPeriod;
+    int count(String k) => all.where((b) => k == 'all' || _kind(b) == k).length;
+    final list = all.where((b) => _feed == 'all' || _kind(b) == _feed).take(40).toList();
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        const Expanded(child: Text('Shift Ingestion Feed', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800))),
+        Row(children: [const Icon(Icons.circle, color: Colors.green, size: 7), const SizedBox(width: 4), Text('Live', style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800))]),
+      ]),
+      const SizedBox(height: 10),
+      SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        child: Row(children: [
+          for (final f in const [('all', 'ALL'), ('cards', 'CARDS'), ('wallet', 'WALLET'), ('cash', 'CASH'), ('app', 'APP')]) ...[
+            ChoiceChip(label: Text('${f.$2} (${count(f.$1)})', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800)), selected: _feed == f.$1, showCheckmark: false, selectedColor: AppColors.primary, labelStyle: TextStyle(color: _feed == f.$1 ? Colors.white : ink), onSelected: (_) => setState(() => _feed = f.$1)),
+            const SizedBox(width: 8),
+          ],
+          TextButton.icon(onPressed: _exportCsv, icon: const Icon(Icons.download, size: 14), label: const Text('CSV')),
+        ]),
       ),
+      const SizedBox(height: 8),
+      if (list.isEmpty) const Padding(padding: EdgeInsets.symmetric(vertical: 14), child: Text('No transactions match.', style: TextStyle(color: muted, fontSize: 13))),
+      for (final b in list) _feedRow(b),
+    ]);
+  }
+
+  Widget _feedRow(Map<String, dynamic> b) {
+    final cancelled = b['status'] == 'Cancelled';
+    final refunded = b['refunded_at'] != null;
+    final kind = _kind(b);
+    final icon = cancelled ? Icons.undo_rounded : (kind == 'cash' ? Icons.payments_outlined : (kind == 'wallet' ? Icons.account_balance_wallet_outlined : (kind == 'cards' ? Icons.qr_code_2_rounded : Icons.phone_iphone_rounded)));
+    final status = cancelled ? (refunded ? 'Refunded' : 'Cancelled') : (b['status'] == 'Checked-in' ? 'Checked in' : 'Settled');
+    return Container(
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14), border: Border.all(color: const Color(0xFFE9EEFF))),
+      child: Row(children: [
+        Container(width: 38, height: 38, decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(10)), child: Icon(icon, color: cancelled ? Colors.redAccent : AppColors.primary, size: 18)),
+        const SizedBox(width: 10),
+        Expanded(
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Row(children: [
+              Flexible(child: Text('${b['court_name']}', overflow: TextOverflow.ellipsis, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w800))),
+              const SizedBox(width: 6),
+              Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(6)), child: Text(_kindLabel(kind).toUpperCase(), style: const TextStyle(color: ink, fontSize: 7, fontWeight: FontWeight.w700))),
+            ]),
+            Text('${b['booking_ref']} • ${shortTime(_created(b))}', style: const TextStyle(color: muted, fontSize: 9)),
+          ]),
+        ),
+        Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
+          Text('${cancelled ? '-' : '+'}LKR ${_money(_amount(b))}', style: TextStyle(color: cancelled ? Colors.redAccent : AppColors.primary, fontSize: 11, fontWeight: FontWeight.w800)),
+          Text(status, style: const TextStyle(color: ink, fontSize: 9, fontWeight: FontWeight.w700)),
+        ]),
+      ]),
+    );
+  }
+
+  Widget _vault(int pendingCount) {
+    final ready = pendingCount == 0;
+    return Container(
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(22)),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Icon(Icons.shield_outlined, color: AppColors.primary, size: 18),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Vault Reconciliation Protocol', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800))),
+          Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: ready ? Colors.white : const Color(0xFFFFE9E9), borderRadius: BorderRadius.circular(10)), child: Text(ready ? 'Ready' : '$pendingCount refunds pending', style: TextStyle(color: ready ? AppColors.primary : Colors.redAccent, fontSize: 9, fontWeight: FontWeight.w800))),
+        ]),
+        const SizedBox(height: 8),
+        const Text('Closing the ledger records today\'s totals, compares the cash you counted in the drawer with what the system expects, and stores the shift summary for audit.', style: TextStyle(color: muted, fontSize: 11, height: 1.5)),
+        const SizedBox(height: 14),
+        SizedBox(
+          width: double.infinity,
+          height: 52,
+          child: FilledButton.icon(
+            onPressed: _closeShift,
+            icon: const Icon(Icons.lock_outline, size: 16),
+            label: const Text('Reconcile & Close Shift', style: TextStyle(fontWeight: FontWeight.w700)),
+            style: FilledButton.styleFrom(backgroundColor: ink, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
+          ),
+        ),
+      ]),
     );
   }
 }
