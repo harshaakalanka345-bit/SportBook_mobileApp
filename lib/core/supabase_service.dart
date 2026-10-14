@@ -3,7 +3,9 @@ import 'dart:typed_data';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class SupabaseService {
-  final _client = Supabase.instance.client;
+  // Resolve lazily so screens can be constructed before app initialization
+  // (for example during widget tests or while the startup gate is loading).
+  SupabaseClient get _client => Supabase.instance.client;
 
   User? get currentUser => _client.auth.currentUser;
   Session? get currentSession => _client.auth.currentSession;
@@ -113,7 +115,8 @@ class SupabaseService {
     if (environment != null && environment != 'All') {
       query = query.eq('environment', environment);
     }
-    return await query;
+    final rows = await query.order('created_at', ascending: true);
+    return rows.map((row) => Map<String, dynamic>.from(row)).toList();
   }
 
   // ==========================================
@@ -323,7 +326,7 @@ class SupabaseService {
     final venues = await getMyVenues();
     if (venues.isEmpty) return [];
     final ids = venues.map((v) => v['id'] as String).toList();
-    return await _client.from('bookings').select('*, venues(name)').inFilter('venue_id', ids).order('created_at', ascending: false);
+    return await _client.from('bookings').select('*, venues(name, area, address)').inFilter('venue_id', ids).order('created_at', ascending: false);
   }
 
   // ==========================================

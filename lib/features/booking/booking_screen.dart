@@ -101,7 +101,10 @@ class _BookingScreenState extends State<BookingScreen> {
         var bookings = snapshot.data ?? [];
         final q = _searchCtl.text.trim().toLowerCase();
         if (q.isNotEmpty) {
-          bookings = bookings.where((b) => '${(b['venues'] as Map?)?['name']} ${b['court_name']} ${b['booking_ref']} ${b['date_schedule']}'.toLowerCase().contains(q)).toList();
+          bookings = bookings.where((b) {
+            final venue = (b['venues'] as Map?) ?? const {};
+            return '${venue['name']} ${venue['area']} ${venue['address']} ${venue['sport']} ${b['court_name']} ${b['booking_ref']} ${b['date_schedule']}'.toLowerCase().contains(q);
+          }).toList();
         }
         if (!_newestFirst) bookings = bookings.reversed.toList();
         

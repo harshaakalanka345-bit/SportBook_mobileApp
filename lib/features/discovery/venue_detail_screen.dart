@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
-import '../booking/booking_flow/booking_step1_screen.dart';
+import '../booking/booking_flow/booking_step1_screen.dart';import '../booking/booking_flow/booking_flow_popup.dart';
+
 import '../../core/toast.dart';
 import '../../core/actions.dart';
 import '../../core/supabase_service.dart';
@@ -49,7 +50,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
     }
   }
 
-  void _book() => Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: widget.venue)));
+  void _book() => showBookingStepPopup(context, BookingStep1Screen(venue: widget.venue));
 
   @override
   Widget build(BuildContext context) {
@@ -766,7 +767,7 @@ class _VenueDetailScreenState extends State<VenueDetailScreen> {
           Expanded(
             child: FilledButton.icon(
               onPressed: () {
-                Navigator.push(context, MaterialPageRoute(builder: (context) => BookingStep1Screen(venue: widget.venue)));
+                showBookingStepPopup(context, BookingStep1Screen(venue: widget.venue));
               },
               icon: const Icon(Icons.calendar_month_rounded, size: 18),
               label: const Text('Book Court Now', style: TextStyle(fontSize: 14, fontWeight: FontWeight.w700)),

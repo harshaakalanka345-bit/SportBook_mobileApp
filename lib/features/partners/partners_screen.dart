@@ -22,6 +22,7 @@ class _PartnersScreenState extends State<PartnersScreen> {
   static const _softBlue = Color(0xFFF0F2FF);
 
   final _service = SupabaseService();
+  final _search = TextEditingController();
   late Future<List<Map<String, dynamic>>> _beacons;
   late Future<List<Map<String, dynamic>>> _friendsFuture;
 
@@ -33,6 +34,12 @@ class _PartnersScreenState extends State<PartnersScreen> {
   }
 
   void _reloadFriends() => setState(() => _friendsFuture = _service.getFriends());
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
 
   Future<void> _addFriend() async {
     final name = TextEditingController();
@@ -226,7 +233,22 @@ class _PartnersScreenState extends State<PartnersScreen> {
   }
 
   Widget _buildSearch() {
-    return TextField(decoration: InputDecoration(prefixIcon: const Icon(Icons.search_rounded, color: _muted), hintText: 'Search by name, skill, or venue (e.g.', suffixIcon: Container(margin: const EdgeInsets.all(7), padding: const EdgeInsets.symmetric(horizontal: 10), decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(20)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.navigation_rounded, color: AppColors.primary, size: 17), SizedBox(width: 4), Text('Col 07', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w600))])), filled: true, fillColor: Colors.white, border: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide.none), enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide.none)));
+    return TextField(
+      controller: _search,
+      onChanged: (_) => setState(() {}),
+      textInputAction: TextInputAction.search,
+      decoration: InputDecoration(
+        prefixIcon: const Icon(Icons.search_rounded, color: _muted),
+        hintText: 'Search by name, skill, or venue',
+        suffixIcon: _search.text.isEmpty
+            ? Container(margin: const EdgeInsets.all(7), padding: const EdgeInsets.symmetric(horizontal: 10), decoration: BoxDecoration(color: _softBlue, borderRadius: BorderRadius.circular(20)), child: const Row(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.navigation_rounded, color: AppColors.primary, size: 17), SizedBox(width: 4), Text('Col 07', style: TextStyle(color: _ink, fontSize: 12, fontWeight: FontWeight.w600))]))
+            : IconButton(icon: const Icon(Icons.close_rounded), onPressed: () => setState(_search.clear)),
+        filled: true,
+        fillColor: Colors.white,
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide.none),
+        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(26), borderSide: BorderSide.none),
+      ),
+    );
   }
 
   Widget _buildSportFilters() {
@@ -277,7 +299,12 @@ class _PartnersScreenState extends State<PartnersScreen> {
           builder: (context, snap) {
             if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
             if (snap.hasError) return Center(child: Text('Could not load match hubs: ${snap.error}', style: const TextStyle(color: _muted)));
-            final all = (snap.data ?? []).where((b) => '${b['sport']}' == _sport || _sport == 'All').toList();
+            final q = _search.text.trim().toLowerCase();
+            final all = (snap.data ?? []).where((b) {
+              if (_sport != 'All' && '${b['sport']}' != _sport) return false;
+              if (q.isEmpty) return true;
+              return '${b['sport']} ${b['skill_level']} ${b['venue_name']} ${b['scheduled_time']}'.toLowerCase().contains(q);
+            }).toList();
             if (all.isEmpty) return Center(child: Text('No $_sport beacons yet. Tap "Request a Partner" to start one.', textAlign: TextAlign.center, style: const TextStyle(color: _muted)));
             return ListView(scrollDirection: Axis.horizontal, children: [for (final b in all) _beaconCard(b)]);
           },
@@ -300,7 +327,11 @@ class _PartnersScreenState extends State<PartnersScreen> {
         builder: (context, snap) {
           if (snap.connectionState != ConnectionState.done) return const Padding(padding: EdgeInsets.all(20), child: Center(child: CircularProgressIndicator()));
           if (snap.hasError) return Text('Could not load friends: ${snap.error}', style: const TextStyle(color: _muted));
-          final list = snap.data ?? [];
+          final q = _search.text.trim().toLowerCase();
+          final list = (snap.data ?? []).where((f) {
+            if (q.isEmpty) return true;
+            return '${f['friend_name']} ${f['friend_contact']}'.toLowerCase().contains(q);
+          }).toList();
           if (list.isEmpty) return const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Text('No friends yet. Tap "Add Friend" to build your squad.', style: TextStyle(color: _muted)));
           return Column(children: [for (final f in list) _realFriendCard(f)]);
         },

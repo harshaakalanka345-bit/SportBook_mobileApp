@@ -4,6 +4,8 @@ import '../../../core/app_theme.dart';
 import '../../../core/booking_draft.dart';
 import '../../../core/supabase_service.dart';
 import 'booking_step2_screen.dart';
+import 'booking_flow_exit.dart';
+import 'booking_flow_popup.dart';
 
 class BookingStep1Screen extends StatefulWidget {
   const BookingStep1Screen({super.key, this.venue});
@@ -208,12 +210,10 @@ class _BookingStep1ScreenState extends State<BookingStep1Screen> {
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: const Text('Flow', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+          IconButton(
+            tooltip: 'Close booking flow',
+            icon: const Icon(Icons.close_rounded, color: ink),
+            onPressed: () => closeBookingFlow(context),
           ),
         ],
       ),
@@ -809,7 +809,7 @@ class _BookingStep1ScreenState extends State<BookingStep1Screen> {
                             startAt: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, sel.first.startHour),
                             endAt: DateTime(_selectedDate.year, _selectedDate.month, _selectedDate.day, sel.first.startHour + sel.length),
                           );
-                          Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep2Screen()));
+                          showBookingStepPopup(context, const BookingStep2Screen());
                         },
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,

@@ -1,12 +1,16 @@
-import 'package:flutter/material.dart';
+import 'dart:math' as math;
 
+import 'package:flutter/material.dart';
 import '../../core/app_theme.dart';
+import '../../core/location_service.dart';
 import '../../core/supabase_service.dart';
 import '../booking/booking_flow/booking_step1_screen.dart';
+import '../booking/booking_flow/booking_flow_popup.dart';
 import '../auth/profile_screen.dart';
 import '../notifications/notifications_screen.dart';
 import 'venue_detail_screen.dart';
 import 'search_screen.dart';
+import 'location_access_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -19,10 +23,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   final _service = SupabaseService();
   String _selectedSport = 'Badminton';
   Map<String, dynamic>? _lastBooking;
+  String _locationLabel = 'COLOMBO 07, CINNAMON GARDENS';
+  String? _locationSearchText;
+  AppLocation? _currentLocation;
+  late Future<List<Map<String, dynamic>>> _venuesFuture;
 
   @override
   void initState() {
     super.initState();
+    _refreshVenues();
     _service.getUserBookings().then((list) {
       if (mounted && list.isNotEmpty) setState(() => _lastBooking = list.first);
     }).catchError((_) {});
@@ -38,7 +47,38 @@ class _DashboardScreenState extends State<DashboardScreen> {
   ];
 
   Future<List<Map<String, dynamic>>> _loadVenues() {
-    return _service.getVenues(sport: _selectedSport);
+    return _service.getVenues(sport: _selectedSport).then(_venuesForLocation);
+  }
+
+  void _refreshVenues() {
+    _venuesFuture = _loadVenues();
+  }
+
+  List<Map<String, dynamic>> _venuesForLocation(List<Map<String, dynamic>> venues) {
+    final query = _locationSearchText?.trim().toLowerCase();
+    final current = _currentLocation;
+    if ((query == null || query.isEmpty) && current == null) return venues;
+    final filtered = venues.where((venue) {
+      if (query != null && query.isNotEmpty) {
+        final text = '${venue['name'] ?? ''} ${venue['area'] ?? ''} ${venue['address'] ?? ''}'.toLowerCase();
+        return query.split(RegExp(r'\s+')).where((part) => part.isNotEmpty).every(text.contains);
+      }
+      final latitude = _number(venue['latitude'] ?? venue['lat']);
+      final longitude = _number(venue['longitude'] ?? venue['lng'] ?? venue['lon']);
+      if (latitude == null || longitude == null || current == null) return true;
+      return _distanceKm(current.latitude, current.longitude, latitude, longitude) <= 25;
+    }).toList();
+    return filtered;
+  }
+
+  double? _number(dynamic value) => value is num ? value.toDouble() : double.tryParse('$value');
+
+  double _distanceKm(double lat1, double lon1, double lat2, double lon2) {
+    const radius = 6371.0;
+    final dLat = (lat2 - lat1) * math.pi / 180;
+    final dLon = (lon2 - lon1) * math.pi / 180;
+    final a = math.sin(dLat / 2) * math.sin(dLat / 2) + math.cos(lat1 * math.pi / 180) * math.cos(lat2 * math.pi / 180) * math.sin(dLon / 2) * math.sin(dLon / 2);
+    return radius * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
   }
 
   @override
@@ -47,7 +87,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       backgroundColor: const Color(0xFFFAF8FF),
       body: SafeArea(
         child: RefreshIndicator(
-          onRefresh: () async => setState(() {}),
+          onRefresh: () async {
+            setState(_refreshVenues);
+            await _venuesFuture;
+          },
           child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
@@ -127,13 +170,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
           const SizedBox(height: 20),
           Row(
             children: [
-              const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
-              const SizedBox(width: 6),
-              const Expanded(
-                child: Text('COLOMBO 07, CINNAMON GARDENS', overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5)),
+              Expanded(
+                child: InkWell(
+                  onTap: _changeLocation,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Row(children: [
+                    const Icon(Icons.location_on_outlined, color: AppColors.primary, size: 20),
+                    const SizedBox(width: 6),
+                    Expanded(child: Text(_locationLabel, overflow: TextOverflow.ellipsis, style: const TextStyle(color: AppColors.primary, fontSize: 14, fontWeight: FontWeight.w700, letterSpacing: 0.5))),
+                    const SizedBox(width: 4),
+                    const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
+                  ]),
+                ),
               ),
-              const SizedBox(width: 4),
-              const Icon(Icons.keyboard_arrow_down_rounded, color: _muted, size: 18),
               IconButton(
                 onPressed: () {
                   final nav = Navigator.of(context);
@@ -159,6 +208,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
+  }
+
+  Future<void> _changeLocation() async {
+    final selection = await Navigator.push<LocationSelection>(context, MaterialPageRoute(builder: (_) => const LocationAccessScreen()));
+    if (!mounted || selection == null) return;
+    setState(() {
+      _locationLabel = selection.label;
+      _locationSearchText = selection.searchText;
+      _currentLocation = selection.location;
+      _refreshVenues();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Showing courts near ${selection.label}.')));
   }
 
   Widget _buildBookingCard() {
@@ -214,7 +275,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 onPressed: () {
                   final v = _lastBooking?['venues'];
                   if (v is Map && v['id'] != null) {
-                    Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: Map<String, dynamic>.from(v))));
+                    showBookingStepPopup(context, BookingStep1Screen(venue: Map<String, dynamic>.from(v)));
                   } else {
                     Navigator.push(context, MaterialPageRoute(builder: (_) => const SearchScreen()));
                   }
@@ -310,19 +371,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildVenues() {
     return FutureBuilder<List<Map<String, dynamic>>>(
-      future: _loadVenues(),
+      future: _venuesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: Padding(padding: EdgeInsets.all(28), child: CircularProgressIndicator()));
-        if (snapshot.hasError) return Text('Unable to load courts: ${snapshot.error}', style: const TextStyle(color: _muted));
+        if (snapshot.hasError) {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Could not connect to the court service.', style: TextStyle(color: _ink, fontWeight: FontWeight.w700)),
+              const SizedBox(height: 4),
+              Text('${snapshot.error}', style: const TextStyle(color: _muted, fontSize: 12)),
+              const SizedBox(height: 10),
+              OutlinedButton.icon(onPressed: () => setState(_refreshVenues), icon: const Icon(Icons.refresh_rounded), label: const Text('Retry courts')),
+            ],
+          );
+        }
         final venues = snapshot.data ?? [];
-        if (venues.isEmpty) return const Text('No courts found for this sport.', style: TextStyle(color: _muted));
+        if (venues.isEmpty) return Text(_locationSearchText == null ? 'No courts found for this sport.' : 'No courts found near $_locationLabel.', style: const TextStyle(color: _muted));
         return Column(children: venues.asMap().entries.map((entry) => Padding(padding: const EdgeInsets.only(bottom: 16), child: _VenueCard(venue: entry.value, imageUrl: _venueImages[entry.key % _venueImages.length], onBook: () => _bookVenue(entry.value)))).toList());
       },
     );
   }
 
   Future<void> _bookVenue(Map<String, dynamic> venue) async {
-    Navigator.push(context, MaterialPageRoute(builder: (_) => BookingStep1Screen(venue: venue)));
+    showBookingStepPopup(context, BookingStep1Screen(venue: venue));
   }
 }
 

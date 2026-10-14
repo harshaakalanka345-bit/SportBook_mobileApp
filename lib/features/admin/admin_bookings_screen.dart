@@ -66,7 +66,8 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
       };
       if (!ok) return false;
       if (q.isEmpty) return true;
-      return '${b['booking_ref']}'.toLowerCase().contains(q) || '${b['qr_turnstile_pin']}'.contains(q) || '${b['court_name']}'.toLowerCase().contains(q);
+      final venue = (b['venues'] as Map?) ?? const {};
+      return '${b['booking_ref']}'.toLowerCase().contains(q) || '${b['qr_turnstile_pin']}'.contains(q) || '${b['court_name']}'.toLowerCase().contains(q) || '${venue['name']} ${venue['area']} ${venue['address']}'.toLowerCase().contains(q);
     }).toList();
   }
 

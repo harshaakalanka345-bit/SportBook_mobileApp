@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import '../../../core/app_theme.dart';
 import '../../../core/booking_draft.dart';
 import 'booking_step3_screen.dart';
+import 'booking_flow_exit.dart';
+import 'booking_flow_popup.dart';
 
 class BookingStep2Screen extends StatefulWidget {
   const BookingStep2Screen({super.key});
@@ -66,12 +68,10 @@ class _BookingStep2ScreenState extends State<BookingStep2Screen> {
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: const Text('Flow', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+          IconButton(
+            tooltip: 'Close booking flow',
+            icon: const Icon(Icons.close_rounded, color: ink),
+            onPressed: () => closeBookingFlow(context),
           ),
         ],
       ),
@@ -603,7 +603,7 @@ class _BookingStep2ScreenState extends State<BookingStep2Screen> {
             child: FilledButton(
               onPressed: () {
                 BookingDraft.setCheckout(gearFee: _gear, discount: _discount, tax: _tax, total: _total, share: _share, gearLabel: _gearLabel);
-                Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep3Screen()));
+                showBookingStepPopup(context, const BookingStep3Screen());
               },
               style: FilledButton.styleFrom(
                 backgroundColor: AppColors.primary,

@@ -5,6 +5,8 @@ import '../../../core/booking_draft.dart';
 import '../../../core/supabase_service.dart';
 import '../../../core/toast.dart';
 import 'booking_step4_screen.dart';
+import 'booking_flow_exit.dart';
+import 'booking_flow_popup.dart';
 
 class BookingStep3Screen extends StatefulWidget {
   const BookingStep3Screen({super.key});
@@ -187,7 +189,7 @@ class _BookingStep3ScreenState extends State<BookingStep3Screen> {
       BookingDraft.pin = pin;
       BookingDraft.paymentLabel = _method == 'newcard' ? 'Card •••• ${_newCard?.last4 ?? ''}' : (_methodLabels[_method] ?? 'Card');
       if (!mounted) return;
-      Navigator.push(context, MaterialPageRoute(builder: (context) => const BookingStep4Screen()));
+      showBookingStepPopup(context, const BookingStep4Screen());
     } catch (e) {
       if (mounted) {
         final msg = '$e';
@@ -221,12 +223,10 @@ class _BookingStep3ScreenState extends State<BookingStep3Screen> {
           ],
         ),
         actions: [
-          Container(
-            margin: const EdgeInsets.only(right: 16, top: 12, bottom: 12),
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-            alignment: Alignment.center,
-            child: const Text('Flow', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
+          IconButton(
+            tooltip: 'Close booking flow',
+            icon: const Icon(Icons.close_rounded, color: ink),
+            onPressed: () => closeBookingFlow(context),
           ),
         ],
       ),

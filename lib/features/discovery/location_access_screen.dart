@@ -1,9 +1,17 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
+import '../../core/actions.dart';
+import '../../core/location_service.dart';
 
-class LocationAccessScreen extends StatelessWidget {
+class LocationAccessScreen extends StatefulWidget {
   const LocationAccessScreen({super.key});
+
+  @override
+  State<LocationAccessScreen> createState() => _LocationAccessScreenState();
+}
+
+class _LocationAccessScreenState extends State<LocationAccessScreen> {
 
   static const _background = Color(0xFFFAF8FF);
   static const _ink = Color(0xFF11182D);
@@ -69,7 +77,7 @@ class LocationAccessScreen extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: () => _requestLocation(context),
                   icon: const Icon(Icons.location_on_outlined, size: 26),
-                  label: const Text('Enable Location Access'),
+                  label: Text(_requesting ? 'Requesting Location…' : 'Enable Location Access'),
                   style: FilledButton.styleFrom(
                     backgroundColor: AppColors.primary,
                     foregroundColor: Colors.white,
@@ -174,17 +182,50 @@ class LocationAccessScreen extends StatelessWidget {
     );
   }
 
-  void _requestLocation(BuildContext context) {
+  bool _requesting = false;
+
+  Future<void> _requestLocation(BuildContext context) async {
+    if (_requesting) return;
+    setState(() => _requesting = true);
+    final position = await requestCurrentLocation();
+    if (!mounted) return;
+    setState(() => _requesting = false);
+    if (position != null) {
+      Navigator.of(context).pop(LocationSelection(
+        label: 'CURRENT LOCATION (${position.latitude.toStringAsFixed(4)}, ${position.longitude.toStringAsFixed(4)})',
+        location: position,
+      ));
+      return;
+    }
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Location permission will be requested when location services are enabled.')),
+      const SnackBar(content: Text('Location access was not granted. Check your browser or device settings and try again.')),
     );
   }
 
   void _enterLocationManually(BuildContext context) {
-    Navigator.of(context).pop();
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Manual location search is ready from the Search page.')),
-    );
+    final controller = TextEditingController();
+    showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Choose your area'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => Navigator.of(dialogContext).pop(controller.text),
+          decoration: const InputDecoration(hintText: 'e.g. Colombo 07, Rajagiriya'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Cancel')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(controller.text), child: const Text('Show courts')),
+        ],
+      ),
+    ).then((value) {
+      controller.dispose();
+      final area = value?.trim() ?? '';
+      if (!mounted || area.isEmpty) return;
+      Navigator.of(context).pop(LocationSelection(label: area.toUpperCase(), searchText: area));
+    });
   }
 }
 

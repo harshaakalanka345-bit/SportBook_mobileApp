@@ -5,6 +5,7 @@ import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'toast.dart';
+import 'location_service.dart';
 
 /// Opens Google Maps directions / search for [destination] (an address or place name).
 Future<void> openDirections(String? destination) async {
@@ -13,7 +14,13 @@ Future<void> openDirections(String? destination) async {
     toast('This venue has no address on file.');
     return;
   }
-  final uri = Uri.https('www.google.com', '/maps/dir/', {'api': '1', 'destination': q});
+  final position = await requestCurrentLocation();
+  final uri = Uri.https('www.google.com', '/maps/dir/', {
+    'api': '1',
+    if (position != null) 'origin': '${position.latitude},${position.longitude}',
+    'destination': q,
+    'travelmode': 'driving',
+  });
   if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) toast('Could not open maps.');
 }
 
