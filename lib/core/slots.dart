@@ -8,7 +8,8 @@ class SlotDef {
   final int startHour;
   final int startMinute;
 
-  DateTime startOn(DateTime day) => DateTime(day.year, day.month, day.day, startHour, startMinute);
+  DateTime startOn(DateTime day) =>
+      DateTime(day.year, day.month, day.day, startHour, startMinute);
   DateTime endOn(DateTime day) => startOn(day).add(const Duration(hours: 1));
 
   /// Base price for this slot: cheaper in the morning, standard in the afternoon, full rate in the evening.
@@ -32,7 +33,51 @@ const kSlots = <SlotDef>[
   SlotDef(10, '09:00 - 10:00 PM', 21),
 ];
 
-String isoDate(DateTime d) => '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+String isoDate(DateTime d) =>
+    '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+/// Whether a displayed slot falls entirely inside the venue's local opening hours.
+/// Missing or invalid hours keep the app's default slot behavior.
+bool slotWithinVenueHours(SlotDef slot, Map<String, dynamic> venue) =>
+    slotLabelWithinVenueHours(slot.label, venue);
+
+bool slotLabelWithinVenueHours(String label, Map<String, dynamic> venue) {
+  final parts = label.split(' - ');
+  if (parts.length != 2) return true;
+  final end = _parseSlotClock(parts[1]);
+  if (end == null) return true;
+  final meridiem = parts[1].trim().toUpperCase().endsWith('PM') ? 'PM' : 'AM';
+  final start = _parseSlotClock('${parts[0]} $meridiem');
+  final opens = _parseVenueClock('${venue['opening_time'] ?? '06:00'}');
+  final closes = _parseVenueClock('${venue['closing_time'] ?? '22:00'}');
+  if (start == null || opens == null || closes == null) return true;
+  return start >= opens && end <= closes;
+}
+
+int? _parseSlotClock(String value) {
+  final match = RegExp(
+    r'^\s*(\d{1,2}):(\d{2})\s*(AM|PM)\s*$',
+    caseSensitive: false,
+  ).firstMatch(value);
+  if (match == null) return null;
+  var hour = int.tryParse(match.group(1)!);
+  final minute = int.tryParse(match.group(2)!);
+  if (hour == null || minute == null || hour < 1 || hour > 12 || minute > 59) {
+    return null;
+  }
+  final isPm = match.group(3)!.toUpperCase() == 'PM';
+  hour = hour % 12 + (isPm ? 12 : 0);
+  return hour * 60 + minute;
+}
+
+int? _parseVenueClock(String value) {
+  final match = RegExp(r'^\s*(\d{1,2}):(\d{2})\s*$').firstMatch(value);
+  if (match == null) return null;
+  final hour = int.tryParse(match.group(1)!);
+  final minute = int.tryParse(match.group(2)!);
+  if (hour == null || minute == null || hour > 23 || minute > 59) return null;
+  return hour * 60 + minute;
+}
 
 String shortTime(DateTime d) {
   final h = d.hour % 12 == 0 ? 12 : d.hour % 12;

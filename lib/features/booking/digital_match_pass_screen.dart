@@ -1,17 +1,71 @@
 import 'package:flutter/material.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
-import '../../core/app_theme.dart';
-import '../../core/toast.dart';
 import '../../core/actions.dart';
+import '../../core/app_theme.dart';
+import '../../core/supabase_service.dart';
 
-class DigitalMatchPassScreen extends StatelessWidget {
+class DigitalMatchPassScreen extends StatefulWidget {
   const DigitalMatchPassScreen({super.key, required this.bookingRef});
 
   final String bookingRef;
 
-  static const ink = Color(0xFF11182D);
-  static const muted = Color(0xFF697083);
-  static const softBlue = Color(0xFFF0F2FF);
+  @override
+  State<DigitalMatchPassScreen> createState() => _DigitalMatchPassScreenState();
+}
+
+class _DigitalMatchPassScreenState extends State<DigitalMatchPassScreen> {
+  static const _ink = Color(0xFF11182D);
+  static const _muted = Color(0xFF697083);
+  static const _softBlue = Color(0xFFF0F2FF);
+  final _service = SupabaseService();
+  late Future<Map<String, dynamic>?> _bookingFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bookingFuture = _service.getUserBookingByRef(widget.bookingRef);
+  }
+
+  String _date(dynamic raw) {
+    final date = DateTime.tryParse('$raw');
+    if (date == null) return 'Date not available';
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    return '${weekdays[date.weekday - 1]}, ${date.day} ${months[date.month - 1]} ${date.year}';
+  }
+
+  String _money(dynamic value) {
+    final amount = value is num ? value : num.tryParse('$value');
+    if (amount == null) return '—';
+    final whole = amount.toStringAsFixed(
+      amount == amount.roundToDouble() ? 0 : 2,
+    );
+    return 'LKR ${whole.replaceAllMapped(RegExp(r'(?<=\d)(?=(\d{3})+(?!\d))'), (_) => ',')}';
+  }
+
+  Map<String, dynamic>? _paymentDetails(dynamic raw) {
+    if (raw is! List) return null;
+    for (final item in raw) {
+      if (item is Map && item.containsKey('payment_method')) {
+        return Map<String, dynamic>.from(item);
+      }
+    }
+    return null;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -21,345 +75,515 @@ class DigitalMatchPassScreen extends StatelessWidget {
         backgroundColor: const Color(0xFFFAF8FF),
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_rounded, color: ink),
+          icon: const Icon(Icons.arrow_back_rounded, color: _ink),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Row(
+        title: const Row(
           children: [
-            Container(
-              width: 32,
-              height: 32,
-              decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-              child: const Icon(Icons.qr_code_scanner_rounded, color: Colors.white, size: 16),
+            Icon(Icons.qr_code_2_rounded, color: AppColors.primary),
+            SizedBox(width: 9),
+            Text(
+              'Digital Match Pass',
+              style: TextStyle(
+                color: _ink,
+                fontSize: 17,
+                fontWeight: FontWeight.w700,
+              ),
             ),
-            const SizedBox(width: 8),
-            const Text('Digital Match\nPass', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800, height: 1.1)),
           ],
         ),
         actions: [
-          IconButton(icon: const Icon(Icons.share_outlined, color: ink), onPressed: () => shareText('My SportsBook match pass - booking ${bookingRef}. Show this reference at the venue gate.')),
-          IconButton(icon: const Icon(Icons.more_vert_rounded, color: ink), onPressed: () => copyText(bookingRef, message: 'Booking reference copied')),
-          Container(
-            margin: const EdgeInsets.only(right: 16, left: 4),
-            width: 32,
-            height: 32,
-            decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-            child: const Icon(Icons.person_outline_rounded, color: Colors.white, size: 16),
+          IconButton(
+            tooltip: 'Refresh booking details',
+            onPressed: () => setState(() {
+              _bookingFuture = _service.getUserBookingByRef(widget.bookingRef);
+            }),
+            icon: const Icon(Icons.refresh_rounded, color: _ink),
           ),
         ],
       ),
-      body: SafeArea(
-        child: ListView(
-          padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+      body: FutureBuilder<Map<String, dynamic>?>(
+        future: _bookingFuture,
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return _message(
+              icon: Icons.cloud_off_rounded,
+              title: 'Pass details could not load',
+              body: 'Check your connection and refresh to try again.',
+              action: FilledButton.icon(
+                onPressed: () => setState(() {
+                  _bookingFuture = _service.getUserBookingByRef(
+                    widget.bookingRef,
+                  );
+                }),
+                icon: const Icon(Icons.refresh_rounded),
+                label: const Text('Try again'),
+              ),
+            );
+          }
+          final booking = snapshot.data;
+          if (booking == null) {
+            return _message(
+              icon: Icons.confirmation_number_outlined,
+              title: 'Booking not found',
+              body: 'This booking is not available on your account.',
+            );
+          }
+          return _buildPass(booking);
+        },
+      ),
+    );
+  }
+
+  Widget _message({
+    required IconData icon,
+    required String title,
+    required String body,
+    Widget? action,
+  }) {
+    return Center(
+      child: Padding(
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            _buildSecurityToken(),
-            const SizedBox(height: 16),
-            _buildMatchPassCard(),
-            const SizedBox(height: 16),
-            _buildChecklist(),
-            const SizedBox(height: 16),
-            _buildRoster(),
-            const SizedBox(height: 16),
-            _buildNavigationCard(),
-            const SizedBox(height: 32),
-            _buildFooter(),
+            Icon(icon, color: AppColors.primary, size: 44),
+            const SizedBox(height: 14),
+            Text(
+              title,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: _ink,
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+              ),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              body,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: _muted, height: 1.4),
+            ),
+            if (action != null) ...[const SizedBox(height: 18), action],
           ],
         ),
       ),
     );
   }
 
-  Widget _buildSecurityToken() {
-    return Column(
+  Widget _buildPass(Map<String, dynamic> booking) {
+    final venue = booking['venues'] is Map
+        ? Map<String, dynamic>.from(booking['venues'] as Map)
+        : <String, dynamic>{};
+    final name = '${venue['name'] ?? 'Venue'}';
+    final address = '${venue['address'] ?? venue['area'] ?? ''}'.trim();
+    final sport = '${venue['sport'] ?? ''}'.trim();
+    final environment = '${venue['environment'] ?? ''}'.trim();
+    final court = '${booking['court_name'] ?? 'Court'}';
+    final ref = '${booking['booking_ref'] ?? widget.bookingRef}';
+    final pin = '${booking['qr_turnstile_pin'] ?? ''}'.trim();
+    final status = '${booking['status'] ?? 'Confirmed'}';
+    final cancelled = status.toLowerCase() == 'cancelled';
+    final refunded = booking['refunded_at'] != null;
+    final accessCode = pin.isNotEmpty ? pin : ref;
+    final timeSlot = '${booking['time_slot'] ?? 'Time not available'}';
+    final payment = _paymentDetails(booking['addons']);
+    final dueAtVenue = payment?['payment_status'] == 'Due at venue';
+    final amount = dueAtVenue && payment != null
+        ? payment['full_total']
+        : booking['total_paid'];
+    final venueLine = [
+      sport,
+      environment,
+      court,
+    ].where((part) => part.isNotEmpty).join(' • ');
+    final share =
+        'SportsBook booking $ref at $name on ${_date(booking['date_schedule'])}, $timeSlot.';
+
+    return ListView(
+      padding: const EdgeInsets.fromLTRB(18, 10, 18, 32),
       children: [
         Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(20)),
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: _softBlue,
+            borderRadius: BorderRadius.circular(16),
+          ),
           child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: const [
-                  Icon(Icons.circle, size: 10, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('LIVE SECURITY TOKEN', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
-                ],
+              Icon(
+                cancelled || refunded
+                    ? Icons.info_outline_rounded
+                    : Icons.wb_sunny_outlined,
+                color: cancelled || refunded
+                    ? Colors.redAccent
+                    : AppColors.primary,
               ),
-              Row(
-                children: const [
-                  Text('REFRESHES IN ', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
-                  Text('27s', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
-                ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  cancelled
+                      ? 'This booking is cancelled. Its entry code is no longer shown.'
+                      : refunded
+                      ? 'This booking has been refunded. Contact the venue before using this pass.'
+                      : 'Show the booking code below to the venue staff when you arrive.',
+                  style: const TextStyle(
+                    color: _muted,
+                    fontSize: 12,
+                    height: 1.35,
+                  ),
+                ),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
+        Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: const Color(0xFFE9EEFF)),
+            boxShadow: const [
+              BoxShadow(
+                color: Color(0x0A000000),
+                blurRadius: 14,
+                offset: Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            children: [
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(20),
+                decoration: const BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Expanded(
+                          child: Text(
+                            'BOOKING PASS',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                            ),
+                          ),
+                        ),
+                        _statusChip(status),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      name,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 23,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (address.isNotEmpty) ...[
+                      const SizedBox(height: 5),
+                      Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on_outlined,
+                            size: 15,
+                            color: Colors.white70,
+                          ),
+                          const SizedBox(width: 4),
+                          Expanded(
+                            child: Text(
+                              address,
+                              style: const TextStyle(
+                                color: Colors.white70,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                    const SizedBox(height: 18),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            venueLine.isEmpty ? court : venueLine,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            const Text(
+                              'BOOKING REF',
+                              style: TextStyle(
+                                color: Colors.white70,
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            Text(
+                              ref,
+                              style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _detail(
+                            'DATE',
+                            _date(booking['date_schedule']),
+                          ),
+                        ),
+                        Expanded(
+                          child: _detail('TIME', timeSlot, highlight: true),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+                    Row(
+                      children: [
+                        Expanded(child: _detail('COURT', court)),
+                        Expanded(
+                          child: _detail(
+                            dueAtVenue
+                                ? 'AMOUNT DUE AT VENUE'
+                                : 'BOOKING AMOUNT',
+                            amount == null ? 'Not available' : _money(amount),
+                            highlight: true,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(
+                height: 1,
+                indent: 20,
+                endIndent: 20,
+                color: Color(0xFFE9EEFF),
+              ),
+              if (cancelled || refunded)
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      Icon(
+                        cancelled
+                            ? Icons.event_busy_rounded
+                            : Icons.currency_exchange_rounded,
+                        size: 54,
+                        color: Colors.redAccent,
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        cancelled ? 'Booking cancelled' : 'Booking refunded',
+                        style: const TextStyle(
+                          color: _ink,
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Reference $ref',
+                        style: const TextStyle(color: _muted, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                )
+              else ...[
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 24, 20, 12),
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 220,
+                        height: 220,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: _softBlue,
+                          borderRadius: BorderRadius.circular(18),
+                        ),
+                        child: QrImageView(
+                          data: accessCode,
+                          backgroundColor: _softBlue,
+                          eyeStyle: const QrEyeStyle(
+                            eyeShape: QrEyeShape.square,
+                            color: _ink,
+                          ),
+                          dataModuleStyle: const QrDataModuleStyle(
+                            dataModuleShape: QrDataModuleShape.square,
+                            color: _ink,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      const Text(
+                        'BOOKING CODE',
+                        style: TextStyle(
+                          color: _muted,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1,
+                        ),
+                      ),
+                      const SizedBox(height: 5),
+                      SelectableText(
+                        accessCode,
+                        style: const TextStyle(
+                          color: _ink,
+                          fontSize: 21,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(
+                        onPressed: () =>
+                            copyText(accessCode, message: 'Entry code copied'),
+                        icon: const Icon(Icons.copy_rounded, size: 17),
+                        label: const Text('Copy booking code'),
+                      ),
+                      const SizedBox(height: 6),
+                      const Text(
+                        'If the code cannot be scanned, show your booking reference to the venue staff.',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: _muted,
+                          fontSize: 11,
+                          height: 1.4,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 20,
+                  vertical: 13,
+                ),
+                decoration: const BoxDecoration(
+                  color: _softBlue,
+                  borderRadius: BorderRadius.vertical(
+                    bottom: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.confirmation_number_outlined,
+                      size: 15,
+                      color: AppColors.primary,
+                    ),
+                    const SizedBox(width: 7),
+                    const Expanded(
+                      child: Text(
+                        'Keep this pass available when you arrive',
+                        style: TextStyle(
+                          color: _ink,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      status,
+                      style: const TextStyle(
+                        color: _muted,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
         Row(
-          children: const [
-            Icon(Icons.light_mode_outlined, size: 14, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Turn up screen brightness at Gate B turnstile\nscanner.', style: TextStyle(color: muted, fontSize: 11, height: 1.4)),
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                onPressed: () =>
+                    shareText(share, subject: 'SportsBook booking $ref'),
+                icon: const Icon(Icons.share_outlined),
+                label: const Text('Share details'),
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: address.isEmpty
+                    ? null
+                    : () => openDirections(address),
+                icon: const Icon(Icons.directions_rounded),
+                label: const Text('Directions'),
+              ),
+            ),
           ],
         ),
       ],
     );
   }
 
-  Widget _buildMatchPassCard() {
+  Widget _statusChip(String status) {
+    final cancelled = status.toLowerCase() == 'cancelled';
     return Container(
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(24), border: Border.all(color: const Color(0xFFE9EEFF)), boxShadow: [BoxShadow(color: const Color(0x0A000000), blurRadius: 10, offset: const Offset(0, 4))]),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(20),
-            decoration: const BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24))),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('OFFICIAL MATCH PASS', style: TextStyle(color: Colors.white70, fontSize: 10, fontWeight: FontWeight.w800)),
-                    Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: Colors.white.withOpacity(0.2), borderRadius: BorderRadius.circular(12)), child: Row(children: const [Icon(Icons.verified_outlined, size: 12, color: Colors.white), SizedBox(width: 4), Text('Verified', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700))])),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const Text('CSA National Arena', style: TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Row(
-                  children: const [
-                    Icon(Icons.location_on_outlined, size: 14, color: Colors.white70),
-                    SizedBox(width: 4),
-                    Text('Maitland Place, Colombo 07', style: TextStyle(color: Colors.white70, fontSize: 11)),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(color: Colors.white.withOpacity(0.15), borderRadius: BorderRadius.circular(12)),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('SPORT & COURT', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w800)),
-                          Text('Badminton â€¢ Court 1', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-                          Text('Indoor Wooden Parquet', style: TextStyle(color: Colors.white70, fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        const Text('BOOKING REF', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w800)),
-                        Text(bookingRef, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800)),
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('DATE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 4),
-                          Text('Thu, 24 Oct 2024', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('TIME SLOT', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 4),
-                          Text('06:00 PM - 08:00 PM', style: TextStyle(color: AppColors.primary, fontSize: 13, fontWeight: FontWeight.w700)),
-                          Text('2 Hours Duration', style: TextStyle(color: muted, fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 20),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('TURNSTILE GATE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 4),
-                          Text('Gate B (South\nEntrance)', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
-                        ],
-                      ),
-                    ),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
-                          Text('LEAD HOST', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-                          SizedBox(height: 4),
-                          Text('Kasun Perera', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w600)),
-                          Text('4 Players Confirmed', style: TextStyle(color: AppColors.primary, fontSize: 10)),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              const Divider(color: Color(0xFFE9EEFF), height: 1, thickness: 1, indent: 20, endIndent: 20),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Container(width: 16, height: 32, decoration: const BoxDecoration(color: Color(0xFFFAF8FF), borderRadius: BorderRadius.only(topRight: Radius.circular(16), bottomRight: Radius.circular(16)))),
-                  Container(width: 16, height: 32, decoration: const BoxDecoration(color: Color(0xFFFAF8FF), borderRadius: BorderRadius.only(topLeft: Radius.circular(16), bottomLeft: Radius.circular(16)))),
-                ],
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              children: [
-                Container(
-                  width: 200,
-                  height: 200,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: softBlue.withOpacity(0.5), borderRadius: BorderRadius.circular(16)),
-                  child: Stack(
-                    children: [
-                      const Center(child: Icon(Icons.qr_code_2_rounded, size: 160, color: ink)),
-                      // Frame corners
-                      Positioned(top: 0, left: 0, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 2), left: BorderSide(color: AppColors.primary, width: 2))))),
-                      Positioned(top: 0, right: 0, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(top: BorderSide(color: AppColors.primary, width: 2), right: BorderSide(color: AppColors.primary, width: 2))))),
-                      Positioned(bottom: 0, left: 0, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 2), left: BorderSide(color: AppColors.primary, width: 2))))),
-                      Positioned(bottom: 0, right: 0, child: Container(width: 20, height: 20, decoration: const BoxDecoration(border: Border(bottom: BorderSide(color: AppColors.primary, width: 2), right: BorderSide(color: AppColors.primary, width: 2))))),
-                      Center(child: Container(width: 32, height: 32, decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Center(child: Icon(Icons.sports_tennis_rounded, color: AppColors.primary, size: 20)))),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 20),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(24)),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: const [
-                      Text('MANUAL TURNSTILE PIN:  ', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w700)),
-                      Text('8492', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800, letterSpacing: 2)),
-                      SizedBox(width: 8),
-                      Icon(Icons.copy_rounded, size: 14, color: AppColors.primary),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 16),
-                const Text('Hold QR code 10cm above turnstile scanner\nat Gate B, or show code to court marshal.', style: TextStyle(color: muted, fontSize: 10, height: 1.4), textAlign: TextAlign.center),
-              ],
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-            decoration: const BoxDecoration(color: Color(0xFFF0F2FF), borderRadius: BorderRadius.only(bottomLeft: Radius.circular(24), bottomRight: Radius.circular(24))),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: const [
-                Row(
-                  children: [
-                    Icon(Icons.verified_user_outlined, size: 14, color: AppColors.primary),
-                    SizedBox(width: 6),
-                    Text('Kinetic Turnstile Pass', style: TextStyle(color: ink, fontSize: 10, fontWeight: FontWeight.w700)),
-                  ],
-                ),
-                Text('SESSION #8941-K', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
-              ],
-            ),
-          ),
-        ],
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.white.withValues(alpha: 0.18),
+        borderRadius: BorderRadius.circular(20),
       ),
-    );
-  }
-
-  Widget _buildChecklist() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(8)),
-                child: const Icon(Icons.checklist_rounded, size: 18, color: AppColors.primary),
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: const [
-                    Text('Court Access Checklist', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-                    Text('Requirements for seamless venue entry', style: TextStyle(color: muted, fontSize: 10)),
-                  ],
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
-          _checklistItem(Icons.do_not_step_outlined, 'Non-marking footwear mandatory', 'Parquet courts require clean indoor rubber gum soles.'),
-          const SizedBox(height: 12),
-          _checklistItem(Icons.lock_outline_rounded, 'Lockers #14 & #15 Assigned', 'Electronic keyless access code matches your Entry PIN (8492).', highlight: '8492'),
-          const SizedBox(height: 12),
-          _checklistItem(Icons.water_drop_outlined, 'Hydration & Towels Included', 'Collect 2x microfibre towels & electrolyte refills at reception desk.'),
-        ],
-      ),
-    );
-  }
-
-  Widget _checklistItem(IconData icon, String title, String desc, {String? highlight}) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(color: const Color(0xFFFAF8FF), borderRadius: BorderRadius.circular(12)),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 16, color: AppColors.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-                const SizedBox(height: 2),
-                if (highlight != null)
-                  Text.rich(
-                    TextSpan(
-                      children: [
-                        TextSpan(text: desc.split(highlight)[0], style: const TextStyle(color: muted, fontSize: 10, height: 1.3)),
-                        TextSpan(text: highlight, style: const TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800, height: 1.3)),
-                        TextSpan(text: desc.split(highlight)[1], style: const TextStyle(color: muted, fontSize: 10, height: 1.3)),
-                      ],
-                    ),
-                  )
-                else
-                  Text(desc, style: const TextStyle(color: muted, fontSize: 10, height: 1.3)),
-              ],
+          Icon(
+            cancelled ? Icons.cancel_outlined : Icons.verified_outlined,
+            color: Colors.white,
+            size: 12,
+          ),
+          const SizedBox(width: 4),
+          Text(
+            status,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
             ),
           ),
         ],
@@ -367,115 +591,26 @@ class DigitalMatchPassScreen extends StatelessWidget {
     );
   }
 
-  Widget _buildRoster() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
-      child: Column(
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: const [
-                  Icon(Icons.group_outlined, size: 16, color: AppColors.primary),
-                  SizedBox(width: 8),
-                  Text('Roster Invites (3 of 4 Ready)', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                ],
-              ),
-              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4), decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)), child: const Text('Full Court', style: TextStyle(color: AppColors.primary, fontSize: 9, fontWeight: FontWeight.w700))),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Row(
-            children: [
-              _rosterItem('KP', 'Kasun\n(You)', true),
-              const SizedBox(width: 12),
-              _rosterItem('DK', 'Dimuth', false),
-              const SizedBox(width: 12),
-              _rosterItem('SM', 'Sahan', false),
-              const SizedBox(width: 12),
-              _rosterItem('NR', 'Nuwan\n(Pending)', false, pending: true),
-            ],
-          ),
-          const SizedBox(height: 16),
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: const [
-                Icon(Icons.share_outlined, size: 14, color: AppColors.primary),
-                SizedBox(width: 8),
-                Text('Dispatch Match Pass to Team WhatsApp', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _rosterItem(String initials, String name, bool active, {bool pending = false}) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8),
-        decoration: BoxDecoration(color: pending ? const Color(0xFFF4F4F6) : softBlue, borderRadius: BorderRadius.circular(20)),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Container(width: 16, height: 16, decoration: BoxDecoration(color: pending ? muted : AppColors.primary, shape: BoxShape.circle), alignment: Alignment.center, child: Text(initials, style: const TextStyle(color: Colors.white, fontSize: 7, fontWeight: FontWeight.w800))),
-            const SizedBox(width: 4),
-            Text(name, style: TextStyle(color: ink, fontSize: 10, fontWeight: active ? FontWeight.w800 : FontWeight.w600)),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildNavigationCard() {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20), border: Border.all(color: const Color(0xFFE9EEFF))),
-      child: Row(
-        children: [
-          Container(width: 40, height: 40, decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)), child: const Icon(Icons.navigation_rounded, size: 20, color: AppColors.primary)),
-          const SizedBox(width: 16),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
-                Text('Navigate to Arena Turnstiles', style: TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w800)),
-                SizedBox(height: 2),
-                Text('0.8 km â€¢ 4 min drive via Maitland\nCrescent', style: TextStyle(color: muted, fontSize: 10, height: 1.3)),
-              ],
-            ),
-          ),
-          const Icon(Icons.chevron_right_rounded, size: 20, color: muted),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildFooter() {
+  Widget _detail(String label, String value, {bool highlight = false}) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Icon(Icons.support_agent_rounded, size: 14, color: AppColors.primary),
-            SizedBox(width: 8),
-            Text('Need entry help? Call Arena Desk (Maitland Place)', style: TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-          ],
+        Text(
+          label,
+          style: const TextStyle(
+            color: _muted,
+            fontSize: 9,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-        const SizedBox(height: 16),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: const [
-            Text('COLOMBO SPORTS AUTHORITY\PARTNER', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-            Padding(padding: EdgeInsets.symmetric(horizontal: 8), child: Icon(Icons.circle, size: 4, color: muted)),
-            Text('KINETIC ACCESS\nV2.4', style: TextStyle(color: muted, fontSize: 8, fontWeight: FontWeight.w800), textAlign: TextAlign.center),
-          ],
+        const SizedBox(height: 5),
+        Text(
+          value,
+          style: TextStyle(
+            color: highlight ? AppColors.primary : _ink,
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+          ),
         ),
       ],
     );

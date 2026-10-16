@@ -188,7 +188,7 @@ class _ReportIncidentScreenState extends State<ReportIncidentScreen> {
                       const SizedBox(height: 16),
                       _label('VENUE'),
                       DropdownButtonFormField<String>(
-                        value: _venueId,
+                        initialValue: _venueId,
                         isExpanded: true,
                         decoration: InputDecoration(
                           filled: true,

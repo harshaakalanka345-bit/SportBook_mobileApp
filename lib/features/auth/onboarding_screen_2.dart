@@ -23,7 +23,9 @@ class OnboardingScreen2 extends StatelessWidget {
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 24, 20, 22),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 46),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 46,
+                ),
                 child: Column(
                   children: [
                     Row(
@@ -40,7 +42,11 @@ class OnboardingScreen2 extends StatelessWidget {
                           child: const Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              Icon(Icons.circle, color: AppColors.primary, size: 14),
+                              Icon(
+                                Icons.circle,
+                                color: AppColors.primary,
+                                size: 14,
+                              ),
                               SizedBox(width: 9),
                               Text(
                                 'STEP 1 OF 3 • DISCOVER',
@@ -100,20 +106,21 @@ class OnboardingScreen2 extends StatelessWidget {
                       children: [
                         _FeatureTile(
                           icon: Icons.alternate_email_rounded,
-                          title: 'Real-time Slot Radar',
-                          subtitle: 'Direct sync with stadium lighting timers',
+                          title: 'Check court time slots',
+                          subtitle: 'See venue availability before you book',
                         ),
                         SizedBox(height: 12),
                         _FeatureTile(
                           icon: Icons.home_work_outlined,
-                          title: '100% Weatherproof Arenas',
-                          subtitle: 'Zero rain cancellations, climate-controlled',
+                          title: 'Indoor and outdoor venues',
+                          subtitle: 'Compare environments and amenities',
                         ),
                         SizedBox(height: 12),
                         _FeatureTile(
                           icon: Icons.workspace_premium_outlined,
-                          title: 'Verified Facility Quality',
-                          subtitle: 'BWF & ITF grade shock-absorbing mats',
+                          title: 'Venue details before booking',
+                          subtitle:
+                              'Compare sports, court types and hourly rates',
                         ),
                       ],
                     ),
@@ -126,7 +133,10 @@ class OnboardingScreen2 extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: () => _openThirdPage(context),
                         icon: const Text('Next'),
-                        label: const Icon(Icons.arrow_forward_rounded, size: 28),
+                        label: const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 28,
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
@@ -168,7 +178,7 @@ class OnboardingScreen2 extends StatelessWidget {
                           Icon(Icons.shield_outlined, color: _muted, size: 20),
                           SizedBox(width: 8),
                           Text(
-                            'OFFICIAL PARTNER • COLOMBO SPORTS AUTHORITY',
+                            'SportsBook courts and community',
                             style: TextStyle(
                               color: _muted,
                               fontSize: 13,
@@ -202,9 +212,8 @@ class OnboardingScreen2 extends StatelessWidget {
   }
 
   void _openLogin(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AuthScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 }
 
@@ -247,8 +256,12 @@ class _DiscoveryHero extends StatelessWidget {
               top: 28,
               left: 26,
               child: _Pill(
-                leading: Icon(Icons.wifi_tethering_rounded, color: AppColors.primary, size: 18),
-                label: '38+ Courts Available Now in Colombo',
+                leading: Icon(
+                  Icons.wifi_tethering_rounded,
+                  color: AppColors.primary,
+                  size: 18,
+                ),
+                label: 'Explore sports courts near you',
               ),
             ),
             const Positioned(
@@ -257,7 +270,11 @@ class _DiscoveryHero extends StatelessWidget {
               child: CircleAvatar(
                 radius: 31,
                 backgroundColor: Colors.white,
-                child: Icon(Icons.verified_rounded, color: AppColors.primary, size: 30),
+                child: Icon(
+                  Icons.verified_rounded,
+                  color: AppColors.primary,
+                  size: 30,
+                ),
               ),
             ),
             Positioned(
@@ -268,10 +285,22 @@ class _DiscoveryHero extends StatelessWidget {
                 spacing: 10,
                 runSpacing: 12,
                 children: const [
-                  _Pill(leading: Text('🏸', style: TextStyle(fontSize: 17)), label: 'Badminton'),
-                  _Pill(leading: Text('🎾', style: TextStyle(fontSize: 17)), label: 'Tennis'),
-                  _Pill(leading: Text('🏀', style: TextStyle(fontSize: 17)), label: 'Basketball'),
-                  _Pill(leading: Text('🏓', style: TextStyle(fontSize: 17)), label: 'Padel'),
+                  _Pill(
+                    leading: Text('🏸', style: TextStyle(fontSize: 17)),
+                    label: 'Badminton',
+                  ),
+                  _Pill(
+                    leading: Text('🎾', style: TextStyle(fontSize: 17)),
+                    label: 'Tennis',
+                  ),
+                  _Pill(
+                    leading: Text('🏀', style: TextStyle(fontSize: 17)),
+                    label: 'Basketball',
+                  ),
+                  _Pill(
+                    leading: Text('🏓', style: TextStyle(fontSize: 17)),
+                    label: 'Padel',
+                  ),
                 ],
               ),
             ),

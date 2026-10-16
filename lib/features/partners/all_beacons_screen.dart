@@ -32,6 +32,29 @@ class _AllBeaconsScreenState extends State<AllBeaconsScreen> {
     await f;
   }
 
+  String _scheduleLabel(dynamic raw) {
+    final date = DateTime.tryParse('$raw');
+    if (date == null) return '${raw ?? 'Time not set'}';
+    const months = [
+      'Jan',
+      'Feb',
+      'Mar',
+      'Apr',
+      'May',
+      'Jun',
+      'Jul',
+      'Aug',
+      'Sep',
+      'Oct',
+      'Nov',
+      'Dec',
+    ];
+    final hour = date.hour % 12 == 0 ? 12 : date.hour % 12;
+    final time =
+        '$hour:${date.minute.toString().padLeft(2, '0')} ${date.hour >= 12 ? 'PM' : 'AM'}';
+    return '${date.day} ${months[date.month - 1]} ${date.year} • $time';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -39,14 +62,27 @@ class _AllBeaconsScreenState extends State<AllBeaconsScreen> {
       appBar: AppBar(
         backgroundColor: const Color(0xFFFAF8FF),
         elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_rounded, color: ink), onPressed: () => Navigator.pop(context)),
-        title: const Text('Live Match Hubs', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back_rounded, color: ink),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: const Text(
+          'Live Match Hubs',
+          style: TextStyle(
+            color: ink,
+            fontSize: 18,
+            fontWeight: FontWeight.w800,
+          ),
+        ),
       ),
       floatingActionButton: FloatingActionButton.extended(
         backgroundColor: AppColors.primary,
         foregroundColor: Colors.white,
         onPressed: () async {
-          await Navigator.push(context, MaterialPageRoute(builder: (_) => const CreateMatchBeaconScreen()));
+          await Navigator.push(
+            context,
+            MaterialPageRoute(builder: (_) => const CreateMatchBeaconScreen()),
+          );
           _refresh();
         },
         icon: const Icon(Icons.add),
@@ -57,34 +93,85 @@ class _AllBeaconsScreenState extends State<AllBeaconsScreen> {
         child: FutureBuilder<List<Map<String, dynamic>>>(
           future: _future,
           builder: (context, snap) {
-            if (snap.connectionState != ConnectionState.done) return const Center(child: CircularProgressIndicator());
-            if (snap.hasError) return Center(child: Text('Could not load beacons: ${snap.error}', style: const TextStyle(color: muted)));
+            if (snap.connectionState != ConnectionState.done)
+              return const Center(child: CircularProgressIndicator());
+            if (snap.hasError)
+              return Center(
+                child: Text(
+                  'Could not load beacons: ${snap.error}',
+                  style: const TextStyle(color: muted),
+                ),
+              );
             final list = snap.data ?? [];
-            if (list.isEmpty) return ListView(children: const [SizedBox(height: 120), Center(child: Text('No open beacons right now.', style: TextStyle(color: muted)))]);
+            if (list.isEmpty)
+              return ListView(
+                children: const [
+                  SizedBox(height: 120),
+                  Center(
+                    child: Text(
+                      'No open beacons right now.',
+                      style: TextStyle(color: muted),
+                    ),
+                  ),
+                ],
+              );
             return ListView.separated(
               padding: const EdgeInsets.fromLTRB(20, 8, 20, 90),
               itemCount: list.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 12),
+              separatorBuilder: (_, _) => const SizedBox(height: 12),
               itemBuilder: (_, i) {
                 final b = list[i];
                 return Container(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                  child: Row(children: [
-                    Expanded(
-                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                        Text('${b['sport']} - ${b['skill_level']}', style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w800)),
-                        const SizedBox(height: 4),
-                        Text('${b['venue_name']}', style: const TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w700)),
-                        const SizedBox(height: 2),
-                        Text('${b['scheduled_time']}', style: const TextStyle(color: muted, fontSize: 13)),
-                      ]),
-                    ),
-                    IconButton(
-                      onPressed: () => shareText('Match beacon: ${b['sport']} (${b['skill_level']}) at ${b['venue_name']}, ${b['scheduled_time']}. Join me on SportsBook!'),
-                      icon: const Icon(Icons.share_outlined, color: AppColors.primary),
-                    ),
-                  ]),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${b['sport']} - ${b['skill_level']}',
+                              style: const TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800,
+                              ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              '${b['venue_name']}',
+                              style: const TextStyle(
+                                color: ink,
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _scheduleLabel(b['scheduled_time']),
+                              style: const TextStyle(
+                                color: muted,
+                                fontSize: 13,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => shareText(
+                          'Match request: ${b['sport']} (${b['skill_level']}) at ${b['venue_name']}, ${_scheduleLabel(b['scheduled_time'])}.',
+                        ),
+                        icon: const Icon(
+                          Icons.share_outlined,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                    ],
+                  ),
                 );
               },
             );

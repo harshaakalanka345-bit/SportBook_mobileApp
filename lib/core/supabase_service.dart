@@ -11,6 +11,32 @@ class SupabaseService {
   Session? get currentSession => _client.auth.currentSession;
   Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
 
+  /// Payment details are kept in the booking add-ons JSON until a gateway is
+  /// connected. A reservation created with "Pay at venue" has no captured
+  /// payment in `total_paid`; its amount due is stored as `full_total` here.
+  static Map<String, dynamic>? bookingPaymentDetails(
+    Map<String, dynamic> booking,
+  ) {
+    final addons = booking['addons'];
+    if (addons is! List) return null;
+    for (final item in addons) {
+      if (item is Map && item.containsKey('payment_method')) {
+        return Map<String, dynamic>.from(item);
+      }
+    }
+    return null;
+  }
+
+  static bool bookingDueAtVenue(Map<String, dynamic> booking) =>
+      bookingPaymentDetails(booking)?['payment_status'] == 'Due at venue';
+
+  static double bookingAmountForDisplay(Map<String, dynamic> booking) {
+    final payment = bookingPaymentDetails(booking);
+    final due = payment?['full_total'];
+    if (bookingDueAtVenue(booking) && due is num) return due.toDouble();
+    return (booking['total_paid'] as num?)?.toDouble() ?? 0;
+  }
+
   // ==========================================
   // MEMBER 1: AUTH & PROFILE
   // ==========================================
@@ -49,7 +75,10 @@ class SupabaseService {
   Future<void> updateProfile(Map<String, dynamic> data) async {
     final user = _client.auth.currentUser;
     if (user == null) return;
-    await _client.from('profiles').update({...data, 'updated_at': DateTime.now().toIso8601String()}).eq('id', user.id);
+    await _client
+        .from('profiles')
+        .update({...data, 'updated_at': DateTime.now().toIso8601String()})
+        .eq('id', user.id);
   }
 
   // Sign In with Email & Password
@@ -69,7 +98,11 @@ class SupabaseService {
   Future<Map<String, dynamic>?> getProfile() async {
     final user = _client.auth.currentUser;
     if (user == null) return null;
-    final row = await _client.from('profiles').select().eq('id', user.id).maybeSingle();
+    final row = await _client
+        .from('profiles')
+        .select()
+        .eq('id', user.id)
+        .maybeSingle();
     if (row != null) return row;
     // Profile missing (e.g. the sign-up trigger failed): create it now.
     try {
@@ -78,25 +111,15 @@ class SupabaseService {
           .insert({
             'id': user.id,
             'email': user.email,
-            'full_name': (user.userMetadata?['full_name'] as String?) ?? 'SportsBook Member',
+            'full_name':
+                (user.userMetadata?['full_name'] as String?) ??
+                'SportsBook Member',
           })
           .select()
           .single();
     } catch (_) {
       return null;
     }
-  }
-
-  // Update Profile & Wallet
-  Future<void> topUpWallet(double amount) async {
-    final user = _client.auth.currentUser;
-    if (user == null) return;
-    final profile = await getProfile();
-    final currentBalance =
-        (profile?['wallet_balance'] as num?)?.toDouble() ?? 0.0;
-    await _client.from('profiles').update({
-      'wallet_balance': currentBalance + amount,
-    }).eq('id', user.id);
   }
 
   // ==========================================
@@ -107,8 +130,11 @@ class SupabaseService {
   Future<List<Map<String, dynamic>>> getVenues({
     String? sport,
     String? environment,
+    bool includeCourts = false,
   }) async {
-    var query = _client.from('venues').select();
+    var query = _client
+        .from('venues')
+        .select(includeCourts ? '*, courts(name, type, is_active)' : '*');
     if (sport != null && sport != 'All') {
       query = query.eq('sport', sport);
     }
@@ -160,10 +186,30 @@ class SupabaseService {
         .order('created_at', ascending: false);
   }
 
+  /// Reads one of the signed-in player's bookings for the digital entry pass.
+  /// The user filter is intentional even when row-level security is enabled.
+  Future<Map<String, dynamic>?> getUserBookingByRef(String bookingRef) async {
+    final user = _client.auth.currentUser;
+    if (user == null) return null;
+    final row = await _client
+        .from('bookings')
+        .select('*, venues(*)')
+        .eq('user_id', user.id)
+        .eq('booking_ref', bookingRef)
+        .maybeSingle();
+    return row == null ? null : Map<String, dynamic>.from(row);
+  }
+
   /// Slots already taken at a venue on a date (any user). Backed by a SECURITY DEFINER RPC.
   /// Returns `court_name` + `time_slot` (comma-separated slot labels) rows.
-  Future<List<Map<String, dynamic>>> getBookedSlots(String venueId, String dateIso) async {
-    final res = await _client.rpc('get_booked_slots', params: {'p_venue_id': venueId, 'p_date': dateIso});
+  Future<List<Map<String, dynamic>>> getBookedSlots(
+    String venueId,
+    String dateIso,
+  ) async {
+    final res = await _client.rpc(
+      'get_booked_slots',
+      params: {'p_venue_id': venueId, 'p_date': dateIso},
+    );
     return (res as List).cast<Map<String, dynamic>>();
   }
 
@@ -177,23 +223,63 @@ class SupabaseService {
     String newSlot,
     String newDate,
   ) async {
-    await _client.from('bookings').update({
-      'time_slot': newSlot,
-      'date_schedule': newDate,
-      'status': 'Rescheduled',
-    }).eq('booking_ref', bookingRef);
+    await _client
+        .from('bookings')
+        .update({
+          'time_slot': newSlot,
+          'date_schedule': newDate,
+          'status': 'Rescheduled',
+        })
+        .eq('booking_ref', bookingRef);
   }
 
   Future<void> setBookingStatus(String bookingRef, String status) async {
-    await _client.from('bookings').update({'status': status}).eq('booking_ref', bookingRef);
+    await _client
+        .from('bookings')
+        .update({'status': status})
+        .eq('booking_ref', bookingRef);
   }
 
   // Delete / Cancel Booking
   Future<void> cancelBooking(String bookingRef, {String? reason}) async {
-    await _client.from('bookings').update({
-      'status': 'Cancelled',
-      if (reason != null) 'cancel_reason': reason,
-    }).eq('booking_ref', bookingRef);
+    final cleanReason = reason?.trim();
+    if (cleanReason != null && cleanReason.isNotEmpty) {
+      try {
+        final updated = await _client
+            .from('bookings')
+            .update({'status': 'Cancelled', 'cancel_reason': cleanReason})
+            .eq('booking_ref', bookingRef)
+            .select('booking_ref');
+        _ensureBookingWasUpdated(updated, bookingRef);
+        return;
+      } on PostgrestException catch (error) {
+        final columnError = [
+          error.message,
+          error.details,
+          error.hint,
+        ].whereType<String>().join(' ').toLowerCase();
+        final missingReasonColumn =
+            error.code == 'PGRST204' && columnError.contains('cancel_reason');
+        if (!missingReasonColumn) rethrow;
+        // Older hosted databases do not have this optional column. Still let
+        // the player cancel; the reason is saved after migration 005 is run.
+      }
+    }
+
+    final updated = await _client
+        .from('bookings')
+        .update({'status': 'Cancelled'})
+        .eq('booking_ref', bookingRef)
+        .select('booking_ref');
+    _ensureBookingWasUpdated(updated, bookingRef);
+  }
+
+  void _ensureBookingWasUpdated(List<dynamic> rows, String bookingRef) {
+    if (rows.isEmpty) {
+      throw Exception(
+        'Booking $bookingRef was not found, or you do not have permission to cancel it.',
+      );
+    }
   }
 
   // Create Matchmaker Beacon
@@ -227,17 +313,28 @@ class SupabaseService {
 
   // Get Admin Venue (Arena Details)
   Future<Map<String, dynamic>?> getAdminVenue(String venueId) async {
-    return await _client.from('venues').select().eq('id', venueId).maybeSingle();
+    return await _client
+        .from('venues')
+        .select()
+        .eq('id', venueId)
+        .maybeSingle();
   }
 
   // Update Admin Venue (Arena Details)
-  Future<void> updateAdminVenue(String venueId, Map<String, dynamic> data) async {
+  Future<void> updateAdminVenue(
+    String venueId,
+    Map<String, dynamic> data,
+  ) async {
     await _client.from('venues').update(data).eq('id', venueId);
   }
 
   // Get Courts for Venue
   Future<List<Map<String, dynamic>>> getVenueCourts(String venueId) async {
-    return await _client.from('courts').select().eq('venue_id', venueId).order('created_at', ascending: true);
+    return await _client
+        .from('courts')
+        .select()
+        .eq('venue_id', venueId)
+        .order('created_at', ascending: true);
   }
 
   // Add Court
@@ -251,16 +348,17 @@ class SupabaseService {
 
   // Update Court
   Future<void> updateCourt(String courtId, String name, String type) async {
-    await _client.from('courts').update({
-      'name': name,
-      'type': type,
-    }).eq('id', courtId);
+    await _client
+        .from('courts')
+        .update({'name': name, 'type': type})
+        .eq('id', courtId);
   }
 
   // Delete Court
   Future<void> deleteCourt(String courtId) async {
     await _client.from('courts').delete().eq('id', courtId);
   }
+
   // Reset Password
   Future<void> resetPassword(String email) async {
     await _client.auth.resetPasswordForEmail(email);
@@ -273,14 +371,24 @@ class SupabaseService {
   /// Registers a new sports complex owned by the signed-in user.
   Future<Map<String, dynamic>> registerVenue(Map<String, dynamic> data) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('You must be signed in to register a complex.');
-    return await _client.from('venues').insert({...data, 'owner_id': user.id}).select().single();
+    if (user == null) {
+      throw Exception('You must be signed in to register a complex.');
+    }
+    return await _client
+        .from('venues')
+        .insert({...data, 'owner_id': user.id})
+        .select()
+        .single();
   }
 
   Future<List<Map<String, dynamic>>> getMyVenues() async {
     final user = _client.auth.currentUser;
     if (user == null) return [];
-    return await _client.from('venues').select().eq('owner_id', user.id).order('created_at', ascending: true);
+    return await _client
+        .from('venues')
+        .select()
+        .eq('owner_id', user.id)
+        .order('created_at', ascending: true);
   }
 
   Future<void> deleteVenue(String venueId) async {
@@ -299,8 +407,8 @@ class SupabaseService {
       'venue_id': venueId,
       'name': name,
       'type': type,
-      if (sport != null) 'sport': sport,
-      if (hourlyRate != null) 'hourly_rate': hourlyRate,
+      'sport': ?sport,
+      'hourly_rate': ?hourlyRate,
     });
   }
 
@@ -312,13 +420,16 @@ class SupabaseService {
     double? hourlyRate,
     bool? isActive,
   }) async {
-    await _client.from('courts').update({
-      'name': name,
-      'type': type,
-      if (sport != null) 'sport': sport,
-      if (hourlyRate != null) 'hourly_rate': hourlyRate,
-      if (isActive != null) 'is_active': isActive,
-    }).eq('id', courtId);
+    await _client
+        .from('courts')
+        .update({
+          'name': name,
+          'type': type,
+          'sport': ?sport,
+          'hourly_rate': ?hourlyRate,
+          'is_active': ?isActive,
+        })
+        .eq('id', courtId);
   }
 
   /// Bookings for every venue the signed-in user owns.
@@ -326,7 +437,11 @@ class SupabaseService {
     final venues = await getMyVenues();
     if (venues.isEmpty) return [];
     final ids = venues.map((v) => v['id'] as String).toList();
-    return await _client.from('bookings').select('*, venues(name, area, address)').inFilter('venue_id', ids).order('created_at', ascending: false);
+    return await _client
+        .from('bookings')
+        .select('*, venues(name, area, address)')
+        .inFilter('venue_id', ids)
+        .order('created_at', ascending: false);
   }
 
   // ==========================================
@@ -342,7 +457,9 @@ class SupabaseService {
     String? photoUrl,
   }) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('You must be signed in to report an incident.');
+    if (user == null) {
+      throw Exception('You must be signed in to report an incident.');
+    }
     await _client.from('incidents').insert({
       'reporter_id': user.id,
       'venue_id': venueId,
@@ -350,30 +467,48 @@ class SupabaseService {
       'category': category,
       'severity': severity,
       'description': description,
-      if (photoUrl != null) 'photo_url': photoUrl,
+      'photo_url': ?photoUrl,
     });
   }
 
   /// Incidents visible to the current user (their own reports, or those at venues they own).
   Future<List<Map<String, dynamic>>> getIncidents() async {
-    return await _client.from('incidents').select('*, venues(name)').order('created_at', ascending: false);
+    return await _client
+        .from('incidents')
+        .select('*, venues(name)')
+        .order('created_at', ascending: false);
   }
 
-  Future<void> updateIncident(String id, {required String status, String? note}) async {
-    await _client.from('incidents').update({
-      'status': status,
-      if (note != null) 'resolution_note': note,
-      if (status == 'resolved') 'resolved_at': DateTime.now().toIso8601String(),
-    }).eq('id', id);
+  Future<void> updateIncident(
+    String id, {
+    required String status,
+    String? note,
+  }) async {
+    await _client
+        .from('incidents')
+        .update({
+          'status': status,
+          'resolution_note': ?note,
+          if (status == 'resolved')
+            'resolved_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', id);
   }
 
   // ==========================================
   // REVIEWS
   // ==========================================
 
-  Future<void> createReview({required String bookingRef, String? venueId, required int rating, String? comment}) async {
+  Future<void> createReview({
+    required String bookingRef,
+    String? venueId,
+    required int rating,
+    String? comment,
+  }) async {
     final user = _client.auth.currentUser;
-    if (user == null) throw Exception('You must be signed in to leave a review.');
+    if (user == null) {
+      throw Exception('You must be signed in to leave a review.');
+    }
     await _client.from('reviews').insert({
       'user_id': user.id,
       'booking_ref': bookingRef,
@@ -390,7 +525,12 @@ class SupabaseService {
   Future<bool> isFavorite(String venueId) async {
     final user = _client.auth.currentUser;
     if (user == null) return false;
-    final row = await _client.from('favorite_venues').select('venue_id').eq('user_id', user.id).eq('venue_id', venueId).maybeSingle();
+    final row = await _client
+        .from('favorite_venues')
+        .select('venue_id')
+        .eq('user_id', user.id)
+        .eq('venue_id', venueId)
+        .maybeSingle();
     return row != null;
   }
 
@@ -399,30 +539,55 @@ class SupabaseService {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to save venues.');
     if (await isFavorite(venueId)) {
-      await _client.from('favorite_venues').delete().eq('user_id', user.id).eq('venue_id', venueId);
+      await _client
+          .from('favorite_venues')
+          .delete()
+          .eq('user_id', user.id)
+          .eq('venue_id', venueId);
       return false;
     }
-    await _client.from('favorite_venues').insert({'user_id': user.id, 'venue_id': venueId});
+    await _client.from('favorite_venues').insert({
+      'user_id': user.id,
+      'venue_id': venueId,
+    });
     return true;
   }
 
   /// "Notify me" when a slot opens for this sport / area.
-  Future<void> addSlotAlert({required String sport, required String area}) async {
+  Future<void> addSlotAlert({
+    required String sport,
+    required String area,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to create alerts.');
-    await _client.from('slot_alerts').insert({'user_id': user.id, 'sport': sport, 'area': area});
+    await _client.from('slot_alerts').insert({
+      'user_id': user.id,
+      'sport': sport,
+      'area': area,
+    });
   }
 
   Future<List<Map<String, dynamic>>> getFriends() async {
     final user = _client.auth.currentUser;
     if (user == null) return [];
-    return await _client.from('friends').select().eq('user_id', user.id).order('created_at', ascending: false);
+    return await _client
+        .from('friends')
+        .select()
+        .eq('user_id', user.id)
+        .order('created_at', ascending: false);
   }
 
-  Future<void> addFriend({required String name, required String contact}) async {
+  Future<void> addFriend({
+    required String name,
+    required String contact,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to add friends.');
-    await _client.from('friends').insert({'user_id': user.id, 'friend_name': name, 'friend_contact': contact});
+    await _client.from('friends').insert({
+      'user_id': user.id,
+      'friend_name': name,
+      'friend_contact': contact,
+    });
   }
 
   Future<void> removeFriend(String id) async {
@@ -434,24 +599,44 @@ class SupabaseService {
   // ==========================================
 
   /// Merges [changes] into the profile's `preferences` JSON.
-  Future<Map<String, dynamic>> updatePreferences(Map<String, dynamic> changes) async {
+  Future<Map<String, dynamic>> updatePreferences(
+    Map<String, dynamic> changes,
+  ) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Not signed in.');
     final profile = await getProfile();
-    final current = Map<String, dynamic>.from((profile?['preferences'] as Map?) ?? const {});
+    final current = Map<String, dynamic>.from(
+      (profile?['preferences'] as Map?) ?? const {},
+    );
     current.addAll(changes);
-    await _client.from('profiles').update({'preferences': current, 'updated_at': DateTime.now().toIso8601String()}).eq('id', user.id);
+    await _client
+        .from('profiles')
+        .update({
+          'preferences': current,
+          'updated_at': DateTime.now().toIso8601String(),
+        })
+        .eq('id', user.id);
     return current;
   }
 
   Future<List<Map<String, dynamic>>> getSavedCards() async {
     final user = _client.auth.currentUser;
     if (user == null) return [];
-    return await _client.from('payment_methods').select().eq('user_id', user.id).order('is_default', ascending: false).order('created_at', ascending: true);
+    return await _client
+        .from('payment_methods')
+        .select()
+        .eq('user_id', user.id)
+        .order('is_default', ascending: false)
+        .order('created_at', ascending: true);
   }
 
   /// Stores card display details only (brand, last 4, holder, expiry) - never the full number or CVV.
-  Future<void> addSavedCard({required String brand, required String last4, required String holder, required String expiry}) async {
+  Future<void> addSavedCard({
+    required String brand,
+    required String last4,
+    required String holder,
+    required String expiry,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Not signed in.');
     final existing = await getSavedCards();
@@ -468,8 +653,14 @@ class SupabaseService {
   Future<void> setDefaultCard(String id) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Not signed in.');
-    await _client.from('payment_methods').update({'is_default': false}).eq('user_id', user.id);
-    await _client.from('payment_methods').update({'is_default': true}).eq('id', id);
+    await _client
+        .from('payment_methods')
+        .update({'is_default': false})
+        .eq('user_id', user.id);
+    await _client
+        .from('payment_methods')
+        .update({'is_default': true})
+        .eq('id', id);
   }
 
   Future<void> deleteSavedCard(String id) async {
@@ -494,8 +685,11 @@ class SupabaseService {
   Future<String> uploadIncidentPhoto(List<int> bytes, String extension) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to attach photos.');
-    final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
-    await _client.storage.from('incident-photos').uploadBinary(
+    final path =
+        '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    await _client.storage
+        .from('incident-photos')
+        .uploadBinary(
           path,
           Uint8List.fromList(bytes),
           fileOptions: FileOptions(contentType: 'image/$extension'),
@@ -503,14 +697,19 @@ class SupabaseService {
     return _client.storage.from('incident-photos').getPublicUrl(path);
   }
 
-  Future<void> suggestVenue({required String name, required String area, String? sport, String? notes}) async {
+  Future<void> suggestVenue({
+    required String name,
+    required String area,
+    String? sport,
+    String? notes,
+  }) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to suggest a venue.');
     await _client.from('venue_suggestions').insert({
       'user_id': user.id,
       'name': name,
       'area': area,
-      if (sport != null) 'sport': sport,
+      'sport': ?sport,
       if (notes != null && notes.isNotEmpty) 'notes': notes,
     });
   }
@@ -519,8 +718,11 @@ class SupabaseService {
   Future<String> uploadVenueImage(List<int> bytes, String extension) async {
     final user = _client.auth.currentUser;
     if (user == null) throw Exception('Sign in to upload images.');
-    final path = '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
-    await _client.storage.from('venue-images').uploadBinary(
+    final path =
+        '${user.id}/${DateTime.now().millisecondsSinceEpoch}.$extension';
+    await _client.storage
+        .from('venue-images')
+        .uploadBinary(
           path,
           Uint8List.fromList(bytes),
           fileOptions: FileOptions(contentType: 'image/$extension'),
@@ -533,19 +735,42 @@ class SupabaseService {
   // ==========================================
 
   /// All non-cancelled bookings for a venue on a date (owner view).
-  Future<List<Map<String, dynamic>>> getVenueBookingsOn(String venueId, String dateIso) async {
-    return await _client.from('bookings').select().eq('venue_id', venueId).eq('date_schedule', dateIso).neq('status', 'Cancelled').order('created_at');
+  Future<List<Map<String, dynamic>>> getVenueBookingsOn(
+    String venueId,
+    String dateIso,
+  ) async {
+    return await _client
+        .from('bookings')
+        .select()
+        .eq('venue_id', venueId)
+        .eq('date_schedule', dateIso)
+        .neq('status', 'Cancelled')
+        .order('created_at');
   }
 
   /// Names / phones for customer ids (visible to owners for people who booked at their venues).
-  Future<Map<String, Map<String, dynamic>>> getCustomers(List<String> ids) async {
+  Future<Map<String, Map<String, dynamic>>> getCustomers(
+    List<String> ids,
+  ) async {
     if (ids.isEmpty) return {};
-    final rows = await _client.from('profiles').select('id, full_name, phone').inFilter('id', ids);
-    return {for (final r in rows) r['id'] as String: Map<String, dynamic>.from(r)};
+    final rows = await _client
+        .from('profiles')
+        .select('id, full_name, phone')
+        .inFilter('id', ids);
+    return {
+      for (final r in rows) r['id'] as String: Map<String, dynamic>.from(r),
+    };
   }
 
-  Future<List<Map<String, dynamic>>> getSlotBlocks(String venueId, String dateIso) async {
-    final rows = await _client.from('slot_blocks').select().eq('venue_id', venueId).eq('date_schedule', dateIso);
+  Future<List<Map<String, dynamic>>> getSlotBlocks(
+    String venueId,
+    String dateIso,
+  ) async {
+    final rows = await _client
+        .from('slot_blocks')
+        .select()
+        .eq('venue_id', venueId)
+        .eq('date_schedule', dateIso);
     final now = DateTime.now().toUtc();
     return rows.where((r) {
       final exp = r['expires_at'] as String?;
@@ -563,22 +788,19 @@ class SupabaseService {
     DateTime? expiresAt,
   }) async {
     final user = _client.auth.currentUser;
-    await _client.from('slot_blocks').upsert(
-      [
-        for (final s in slotLabels)
-          {
-            'venue_id': venueId,
-            'court_name': courtName,
-            'date_schedule': dateIso,
-            'time_slot': s,
-            'reason': reason,
-            'note': note,
-            'expires_at': expiresAt?.toUtc().toIso8601String(),
-            'created_by': user?.id,
-          },
-      ],
-      onConflict: 'venue_id,court_name,date_schedule,time_slot',
-    );
+    await _client.from('slot_blocks').upsert([
+      for (final s in slotLabels)
+        {
+          'venue_id': venueId,
+          'court_name': courtName,
+          'date_schedule': dateIso,
+          'time_slot': s,
+          'reason': reason,
+          'note': note,
+          'expires_at': expiresAt?.toUtc().toIso8601String(),
+          'created_by': user?.id,
+        },
+    ], onConflict: 'venue_id,court_name,date_schedule,time_slot');
   }
 
   Future<void> removeSlotBlocks(List<String> ids) async {
@@ -586,8 +808,15 @@ class SupabaseService {
     await _client.from('slot_blocks').delete().inFilter('id', ids);
   }
 
-  Future<List<Map<String, dynamic>>> getSurges(String venueId, String dateIso) async {
-    return await _client.from('slot_surges').select().eq('venue_id', venueId).eq('date_schedule', dateIso);
+  Future<List<Map<String, dynamic>>> getSurges(
+    String venueId,
+    String dateIso,
+  ) async {
+    return await _client
+        .from('slot_surges')
+        .select()
+        .eq('venue_id', venueId)
+        .eq('date_schedule', dateIso);
   }
 
   Future<void> setSurge({
@@ -598,30 +827,53 @@ class SupabaseService {
     required double amount,
   }) async {
     if (amount <= 0) {
-      await _client.from('slot_surges').delete().eq('venue_id', venueId).eq('court_name', courtName).eq('date_schedule', dateIso).inFilter('time_slot', slotLabels);
+      await _client
+          .from('slot_surges')
+          .delete()
+          .eq('venue_id', venueId)
+          .eq('court_name', courtName)
+          .eq('date_schedule', dateIso)
+          .inFilter('time_slot', slotLabels);
       return;
     }
-    await _client.from('slot_surges').upsert(
-      [
-        for (final s in slotLabels) {'venue_id': venueId, 'court_name': courtName, 'date_schedule': dateIso, 'time_slot': s, 'amount': amount},
-      ],
-      onConflict: 'venue_id,court_name,date_schedule,time_slot',
-    );
+    await _client.from('slot_surges').upsert([
+      for (final s in slotLabels)
+        {
+          'venue_id': venueId,
+          'court_name': courtName,
+          'date_schedule': dateIso,
+          'time_slot': s,
+          'amount': amount,
+        },
+    ], onConflict: 'venue_id,court_name,date_schedule,time_slot');
   }
 
   /// Extends a booking by appending slots and adding the extra amount to what was paid.
-  Future<void> extendBooking(String bookingRef, {required String newTimeSlot, required double newTotal}) async {
-    await _client.from('bookings').update({'time_slot': newTimeSlot, 'total_paid': newTotal}).eq('booking_ref', bookingRef);
+  Future<void> extendBooking(
+    String bookingRef, {
+    required String newTimeSlot,
+    required double newTotal,
+  }) async {
+    await _client
+        .from('bookings')
+        .update({'time_slot': newTimeSlot, 'total_paid': newTotal})
+        .eq('booking_ref', bookingRef);
   }
 
   Future<Map<String, dynamic>?> lookupCustomer(String phone) async {
-    final res = await _client.rpc('lookup_customer', params: {'p_phone': phone});
+    final res = await _client.rpc(
+      'lookup_customer',
+      params: {'p_phone': phone},
+    );
     final list = (res as List).cast<Map<String, dynamic>>();
     return list.isEmpty ? null : list.first;
   }
 
   Future<void> debitCustomerWallet(String userId, double amount) async {
-    await _client.rpc('debit_customer_wallet', params: {'p_user': userId, 'p_amount': amount});
+    await _client.rpc(
+      'debit_customer_wallet',
+      params: {'p_user': userId, 'p_amount': amount},
+    );
   }
 
   /// Creates a counter (walk-in) booking at a venue the signed-in owner manages.
@@ -665,27 +917,63 @@ class SupabaseService {
   Future<Map<String, dynamic>?> findBookingForCheckin(String code) async {
     final c = code.trim();
     if (c.isEmpty) return null;
-    final byRef = await _client.from('bookings').select('*, venues(name, owner_id)').eq('booking_ref', c).maybeSingle();
+    final byRef = await _client
+        .from('bookings')
+        .select('*, venues(name, owner_id)')
+        .eq('booking_ref', c)
+        .maybeSingle();
     if (byRef != null) return byRef;
-    final rows = await _client.from('bookings').select('*, venues(name, owner_id)').eq('qr_turnstile_pin', c).neq('status', 'Cancelled').order('date_schedule', ascending: false).limit(10);
+    final rows = await _client
+        .from('bookings')
+        .select('*, venues(name, owner_id)')
+        .eq('qr_turnstile_pin', c)
+        .neq('status', 'Cancelled')
+        .order('date_schedule', ascending: false)
+        .limit(10);
     if (rows.isEmpty) return null;
     final today = DateTime.now();
-    final iso = '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
-    return rows.firstWhere((r) => r['date_schedule'] == iso, orElse: () => rows.first);
+    final iso =
+        '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
+    return rows.firstWhere(
+      (r) => r['date_schedule'] == iso,
+      orElse: () => rows.first,
+    );
   }
 
   Future<void> markBookingRefunded(String bookingRef, String method) async {
-    await _client.from('bookings').update({'refunded_at': DateTime.now().toUtc().toIso8601String(), 'refund_method': method}).eq('booking_ref', bookingRef);
+    await _client
+        .from('bookings')
+        .update({
+          'refunded_at': DateTime.now().toUtc().toIso8601String(),
+          'refund_method': method,
+        })
+        .eq('booking_ref', bookingRef);
   }
 
-  Future<void> refundBooking(Map<String, dynamic> booking, {required bool toWallet}) async {
+  Future<void> refundBooking(
+    Map<String, dynamic> booking, {
+    required bool toWallet,
+  }) async {
     final amount = (booking['total_paid'] as num?)?.toDouble() ?? 0;
     final userId = booking['user_id'] as String?;
     if (toWallet) {
-      if (userId == null) throw Exception('Guest bookings have no wallet. Refund in cash instead.');
-      await _client.rpc('credit_customer_wallet', params: {'p_user': userId, 'p_amount': amount});
+      if (userId == null) {
+        throw Exception(
+          'Guest bookings have no wallet. Refund in cash instead.',
+        );
+      }
+      await _client.rpc(
+        'credit_customer_wallet',
+        params: {'p_user': userId, 'p_amount': amount},
+      );
     }
-    await _client.from('bookings').update({'refunded_at': DateTime.now().toUtc().toIso8601String(), 'refund_method': toWallet ? 'wallet' : 'card'}).eq('booking_ref', booking['booking_ref'] as String);
+    await _client
+        .from('bookings')
+        .update({
+          'refunded_at': DateTime.now().toUtc().toIso8601String(),
+          'refund_method': toWallet ? 'wallet' : 'cash',
+        })
+        .eq('booking_ref', booking['booking_ref'] as String);
   }
 
   Future<void> closeShift({
@@ -713,6 +1001,10 @@ class SupabaseService {
   }
 
   Future<List<Map<String, dynamic>>> getShiftClosures() async {
-    return await _client.from('shift_closures').select('*, venues(name)').order('created_at', ascending: false).limit(10);
+    return await _client
+        .from('shift_closures')
+        .select('*, venues(name)')
+        .order('created_at', ascending: false)
+        .limit(10);
   }
 }

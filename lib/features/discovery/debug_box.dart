@@ -20,8 +20,8 @@ class RenderDebugBox extends RenderProxyBox {
 
   @override
   void performLayout() {
-    print('>>> LAYOUT START: $name');
+    debugPrint('>>> LAYOUT START: $name');
     super.performLayout();
-    print('>>> LAYOUT END: $name');
+    debugPrint('>>> LAYOUT END: $name');
   }
 }

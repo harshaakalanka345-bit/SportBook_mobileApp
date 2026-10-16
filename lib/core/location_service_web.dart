@@ -1,4 +1,7 @@
-import 'dart:html' as html;
+import 'dart:async';
+import 'dart:js_interop';
+
+import 'package:web/web.dart' as web;
 
 class AppLocation {
   const AppLocation(this.latitude, this.longitude);
@@ -8,14 +11,17 @@ class AppLocation {
 
 Future<AppLocation?> requestCurrentLocation() async {
   try {
-    final position = await html.window.navigator.geolocation.getCurrentPosition(
-      enableHighAccuracy: true,
-      timeout: const Duration(seconds: 12),
+    final result = Completer<AppLocation?>();
+    web.window.navigator.geolocation.getCurrentPosition(
+      ((web.GeolocationPosition position) {
+        result.complete(AppLocation(position.coords.latitude, position.coords.longitude));
+      }).toJS,
+      ((web.GeolocationPositionError error) {
+        result.complete(null);
+      }).toJS,
+      web.PositionOptions(enableHighAccuracy: true, timeout: 12000),
     );
-    final latitude = position.coords?.latitude;
-    final longitude = position.coords?.longitude;
-    if (latitude == null || longitude == null) return null;
-    return AppLocation(latitude.toDouble(), longitude.toDouble());
+    return await result.future.timeout(const Duration(seconds: 13), onTimeout: () => null);
   } catch (_) {
     return null;
   }

@@ -12,27 +12,12 @@ class WalletScreen extends StatefulWidget {
 
 class _WalletScreenState extends State<WalletScreen> {
   final _service = SupabaseService();
-  bool _isLoading = false;
+  late Future<Map<String, dynamic>?> _profileFuture;
 
-  Future<void> _topUp(double amount) async {
-    setState(() => _isLoading = true);
-    try {
-      await _service.topUpWallet(amount);
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Successfully added LKR ${amount.toStringAsFixed(0)} to wallet!'),
-          backgroundColor: Colors.green,
-        ),
-      );
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Top-up error: $e')),
-      );
-    } finally {
-      if (mounted) setState(() => _isLoading = false);
-    }
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = _service.getProfile();
   }
 
   @override
@@ -40,8 +25,31 @@ class _WalletScreenState extends State<WalletScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('SportsBook Wallet')),
       body: FutureBuilder<Map<String, dynamic>?>(
-        future: _service.getProfile(),
+        future: _profileFuture,
         builder: (context, snapshot) {
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Wallet balance could not load.'),
+                    const SizedBox(height: 8),
+                    TextButton(
+                      onPressed: () => setState(
+                        () => _profileFuture = _service.getProfile(),
+                      ),
+                      child: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
           final balance =
               (snapshot.data?['wallet_balance'] as num?)?.toDouble() ?? 0.0;
 
@@ -62,9 +70,7 @@ class _WalletScreenState extends State<WalletScreen> {
                         const SizedBox(height: 8),
                         Text(
                           'LKR ${balance.toStringAsFixed(0)}',
-                          style: Theme.of(context)
-                              .textTheme
-                              .headlineMedium
+                          style: Theme.of(context).textTheme.headlineMedium
                               ?.copyWith(
                                 fontWeight: FontWeight.w800,
                                 color: AppColors.primary,
@@ -72,46 +78,30 @@ class _WalletScreenState extends State<WalletScreen> {
                         ),
                         const SizedBox(height: 4),
                         const Text(
-                          'Use for instant turnstile court bookings',
-                          style: TextStyle(color: AppColors.muted, fontSize: 12),
+                          'Credits issued to your account by a venue',
+                          style: TextStyle(
+                            color: AppColors.muted,
+                            fontSize: 12,
+                          ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                const SizedBox(height: 24),
-                const Text(
-                  'Quick Top-Up',
-                  style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                ),
-                const SizedBox(height: 12),
-                if (_isLoading)
-                  const Center(child: CircularProgressIndicator())
-                else
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _topUp(500),
-                          child: const Text('+ LKR 500'),
-                        ),
+                const SizedBox(height: 20),
+                const Card(
+                  child: Padding(
+                    padding: EdgeInsets.all(16),
+                    child: Text(
+                      'Wallet top-ups are not connected to a payment provider. Credits can be added by a venue when processing an eligible refund.',
+                      style: TextStyle(
+                        color: AppColors.muted,
+                        fontSize: 13,
+                        height: 1.4,
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _topUp(1000),
-                          child: const Text('+ LKR 1,000'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: () => _topUp(2500),
-                          child: const Text('+ LKR 2,500'),
-                        ),
-                      ),
-                    ],
+                    ),
                   ),
+                ),
               ],
             ),
           );

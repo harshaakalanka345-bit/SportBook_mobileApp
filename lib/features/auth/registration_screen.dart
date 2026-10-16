@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../core/auth_errors.dart';
 
 import '../../core/app_theme.dart';
 import '../../core/role_gate.dart';
+import '../../core/sports.dart';
 import '../../core/supabase_service.dart';
 import 'auth_screen.dart';
 
@@ -73,26 +75,34 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
         // Email confirmation is enabled on the project: send them to log in after verifying.
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Account created. Check your inbox to verify your email, then log in.'),
+            content: Text(
+              'Account created. Check your inbox to verify your email, then log in.',
+            ),
             backgroundColor: Colors.green,
             duration: Duration(seconds: 5),
           ),
         );
-        Navigator.of(context).pushReplacement(MaterialPageRoute(builder: (_) => const AuthScreen()));
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(builder: (_) => const AuthScreen()),
+        );
         return;
       }
       goHome(context);
     } on AuthException catch (e) {
       if (mounted) _showMessage(authErrorMessage(e));
     } catch (_) {
-      if (mounted) _showMessage('Could not reach the server. Check your connection and try again.');
+      if (mounted)
+        _showMessage(
+          'Could not reach the server. Check your connection and try again.',
+        );
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
   }
 
   void _showMessage(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    ScaffoldMessenger.of(context)
+        .showSnackBar(SnackBar(content: Text(message)));
   }
 
   @override
@@ -175,7 +185,8 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
                   });
                 },
                 acceptedTerms: _acceptedTerms,
-                onTermsChanged: (value) => setState(() => _acceptedTerms = value),
+                onTermsChanged: (value) =>
+                    setState(() => _acceptedTerms = value),
                 isLoading: _isLoading,
                 onSubmit: _createAccount,
               ),
@@ -186,9 +197,9 @@ class _RegistrationScreenState extends State<RegistrationScreen> {
               const SizedBox(height: 22),
               TextButton(
                 onPressed: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AuthScreen()),
-                  );
+                  Navigator.of(
+                    context,
+                  ).push(MaterialPageRoute(builder: (_) => const AuthScreen()));
                 },
                 child: RichText(
                   text: const TextSpan(
@@ -266,7 +277,11 @@ class _RegistrationCard extends StatelessWidget {
         color: Colors.white,
         borderRadius: BorderRadius.circular(28),
         boxShadow: const [
-          BoxShadow(color: Color(0x12001844), blurRadius: 22, offset: Offset(0, 8)),
+          BoxShadow(
+            color: Color(0x12001844),
+            blurRadius: 22,
+            offset: Offset(0, 8),
+          ),
         ],
       ),
       child: Column(
@@ -274,7 +289,11 @@ class _RegistrationCard extends StatelessWidget {
         children: [
           const _FieldTitle('Full Name', trailing: 'REQUIRED'),
           const SizedBox(height: 8),
-          _RegistrationField(controller: nameController, hint: 'e.g. Kasun Perera', icon: Icons.person_outline_rounded),
+          _RegistrationField(
+            controller: nameController,
+            hint: 'e.g. Kasun Perera',
+            icon: Icons.person_outline_rounded,
+          ),
           const SizedBox(height: 18),
           const _FieldTitle('Mobile Number', trailing: 'SMS OTP'),
           const SizedBox(height: 8),
@@ -285,10 +304,19 @@ class _RegistrationCard extends StatelessWidget {
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 decoration: const BoxDecoration(
                   color: Color(0xFFF0F2FF),
-                  borderRadius: BorderRadius.horizontal(left: Radius.circular(24)),
+                  borderRadius: BorderRadius.horizontal(
+                    left: Radius.circular(24),
+                  ),
                 ),
                 child: const Center(
-                  child: Text('+94', style: TextStyle(color: Color(0xFF30374B), fontSize: 17, fontWeight: FontWeight.w600)),
+                  child: Text(
+                    '+94',
+                    style: TextStyle(
+                      color: Color(0xFF30374B),
+                      fontSize: 17,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
               Expanded(
@@ -297,7 +325,9 @@ class _RegistrationCard extends StatelessWidget {
                   hint: '77 123 4567',
                   icon: Icons.phone_android_outlined,
                   keyboardType: TextInputType.phone,
-                  borderRadius: const BorderRadius.horizontal(right: Radius.circular(24)),
+                  borderRadius: const BorderRadius.horizontal(
+                    right: Radius.circular(24),
+                  ),
                 ),
               ),
             ],
@@ -305,7 +335,12 @@ class _RegistrationCard extends StatelessWidget {
           const SizedBox(height: 18),
           const _FieldTitle('Email Address'),
           const SizedBox(height: 8),
-          _RegistrationField(controller: emailController, hint: 'kasunperera@gmail.com', icon: Icons.mail_outline_rounded, keyboardType: TextInputType.emailAddress),
+          _RegistrationField(
+            controller: emailController,
+            hint: 'kasunperera@gmail.com',
+            icon: Icons.mail_outline_rounded,
+            keyboardType: TextInputType.emailAddress,
+          ),
           const SizedBox(height: 18),
           const _FieldTitle('Create Password'),
           const SizedBox(height: 8),
@@ -316,7 +351,12 @@ class _RegistrationCard extends StatelessWidget {
             obscureText: !passwordVisible,
             suffixIcon: IconButton(
               onPressed: onPasswordVisibilityChanged,
-              icon: Icon(passwordVisible ? Icons.visibility_off_outlined : Icons.visibility_outlined, color: const Color(0xFF737A8E)),
+              icon: Icon(
+                passwordVisible
+                    ? Icons.visibility_off_outlined
+                    : Icons.visibility_outlined,
+                color: const Color(0xFF737A8E),
+              ),
             ),
           ),
           const SizedBox(height: 10),
@@ -324,7 +364,17 @@ class _RegistrationCard extends StatelessWidget {
             children: [
               Icon(Icons.circle, color: AppColors.primary, size: 11),
               SizedBox(width: 7),
-              Expanded(child: Text('Strong password', overflow: TextOverflow.ellipsis, style: TextStyle(color: AppColors.primary, fontSize: 16, fontWeight: FontWeight.w600))),
+              Expanded(
+                child: Text(
+                  'Strong password',
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
               SizedBox(width: 5),
               Icon(Icons.check_circle, color: AppColors.primary, size: 18),
               Spacer(),
@@ -336,25 +386,42 @@ class _RegistrationCard extends StatelessWidget {
           const SizedBox(height: 10),
           Row(
             children: [
-              Expanded(child: _RoleOption(label: 'Player', icon: Icons.sports_tennis_rounded, selected: role == 'player', onTap: () => onRoleChanged('player'))),
+              Expanded(
+                child: _RoleOption(
+                  label: 'Player',
+                  icon: Icons.sports_tennis_rounded,
+                  selected: role == 'player',
+                  onTap: () => onRoleChanged('player'),
+                ),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: _RoleOption(label: 'Court Owner', icon: Icons.storefront_rounded, selected: role == 'owner', onTap: () => onRoleChanged('owner'))),
+              Expanded(
+                child: _RoleOption(
+                  label: 'Court Owner',
+                  icon: Icons.storefront_rounded,
+                  selected: role == 'owner',
+                  onTap: () => onRoleChanged('owner'),
+                ),
+              ),
             ],
           ),
           const SizedBox(height: 24),
           if (role == 'player') ...[
-          const _FieldTitle('Favorite Sports', trailing: 'Pick at least 1'),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              _SportChip(label: 'Badminton', icon: Icons.sports_tennis_rounded, selected: selectedSports.contains('Badminton'), onTap: () => onSportChanged('Badminton')),
-              _SportChip(label: 'Tennis', icon: Icons.sports_tennis_rounded, selected: selectedSports.contains('Tennis'), onTap: () => onSportChanged('Tennis')),
-              _SportChip(label: 'Basketball', icon: Icons.sports_basketball_rounded, selected: selectedSports.contains('Basketball'), onTap: () => onSportChanged('Basketball')),
-              _SportChip(label: 'Padel & TT', icon: Icons.sports_handball_rounded, selected: selectedSports.contains('Padel & TT'), onTap: () => onSportChanged('Padel & TT')),
-            ],
-          ),
+            const _FieldTitle('Favorite Sports', trailing: 'Pick at least 1'),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                for (final sport in kSports)
+                  _SportChip(
+                    label: sport,
+                    icon: sportIcon(sport),
+                    selected: selectedSports.contains(sport),
+                    onTap: () => onSportChanged(sport),
+                  ),
+              ],
+            ),
           ],
           const SizedBox(height: 20),
           Row(
@@ -364,7 +431,9 @@ class _RegistrationCard extends StatelessWidget {
                 value: acceptedTerms,
                 onChanged: (value) => onTermsChanged(value ?? false),
                 activeColor: AppColors.primary,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                ),
               ),
               const Expanded(
                 child: Padding(
@@ -372,10 +441,22 @@ class _RegistrationCard extends StatelessWidget {
                   child: Text.rich(
                     TextSpan(
                       text: 'I agree to the ',
-                      style: TextStyle(color: Color(0xFF5D6376), fontSize: 16, height: 1.4),
+                      style: TextStyle(
+                        color: Color(0xFF5D6376),
+                        fontSize: 16,
+                        height: 1.4,
+                      ),
                       children: [
-                        TextSpan(text: 'SportsBook Terms', style: TextStyle(color: AppColors.primary, fontWeight: FontWeight.w600)),
-                        TextSpan(text: ' and Colombo Sports Authority Venue Policies.'),
+                        TextSpan(
+                          text: 'SportsBook Terms',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        TextSpan(
+                          text: ' and Colombo Sports Authority Venue Policies.',
+                        ),
                       ],
                     ),
                   ),
@@ -395,7 +476,10 @@ class _RegistrationCard extends StatelessWidget {
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
                 shape: const StadiumBorder(),
-                textStyle: const TextStyle(fontSize: 19, fontWeight: FontWeight.w500),
+                textStyle: const TextStyle(
+                  fontSize: 19,
+                  fontWeight: FontWeight.w500,
+                ),
                 elevation: 7,
                 shadowColor: AppColors.primary.withValues(alpha: 0.3),
               ),
@@ -417,9 +501,24 @@ class _FieldTitle extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Text(title, style: const TextStyle(color: Color(0xFF11182D), fontSize: 17, fontWeight: FontWeight.w700)),
+        Text(
+          title,
+          style: const TextStyle(
+            color: Color(0xFF11182D),
+            fontSize: 17,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
         const Spacer(),
-        if (trailing != null) Text(trailing!, style: const TextStyle(color: Color(0xFF858B9D), fontSize: 15, fontWeight: FontWeight.w700)),
+        if (trailing != null)
+          Text(
+            trailing!,
+            style: const TextStyle(
+              color: Color(0xFF858B9D),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
       ],
     );
   }
@@ -457,10 +556,22 @@ class _RegistrationField extends StatelessWidget {
         suffixIcon: suffixIcon,
         filled: true,
         fillColor: const Color(0xFFF0F2FF),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 15, vertical: 14),
-        border: OutlineInputBorder(borderRadius: borderRadius ?? BorderRadius.circular(24), borderSide: BorderSide.none),
-        enabledBorder: OutlineInputBorder(borderRadius: borderRadius ?? BorderRadius.circular(24), borderSide: BorderSide.none),
-        focusedBorder: OutlineInputBorder(borderRadius: borderRadius ?? BorderRadius.circular(24), borderSide: const BorderSide(color: AppColors.primary, width: 2)),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 15,
+          vertical: 14,
+        ),
+        border: OutlineInputBorder(
+          borderRadius: borderRadius ?? BorderRadius.circular(24),
+          borderSide: BorderSide.none,
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: borderRadius ?? BorderRadius.circular(24),
+          borderSide: BorderSide.none,
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: borderRadius ?? BorderRadius.circular(24),
+          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+        ),
         hintStyle: const TextStyle(color: Color(0xFF858B9D), fontSize: 18),
       ),
     );
@@ -468,7 +579,12 @@ class _RegistrationField extends StatelessWidget {
 }
 
 class _SportChip extends StatelessWidget {
-  const _SportChip({required this.label, required this.icon, required this.selected, required this.onTap});
+  const _SportChip({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final IconData icon;
@@ -481,8 +597,16 @@ class _SportChip extends StatelessWidget {
       selected: selected,
       onSelected: (_) => onTap(),
       label: Text(label),
-      avatar: Icon(icon, color: selected ? Colors.white : AppColors.primary, size: 19),
-      labelStyle: TextStyle(color: selected ? Colors.white : const Color(0xFF5D6376), fontSize: 16, fontWeight: FontWeight.w500),
+      avatar: Icon(
+        icon,
+        color: selected ? Colors.white : AppColors.primary,
+        size: 19,
+      ),
+      labelStyle: TextStyle(
+        color: selected ? Colors.white : const Color(0xFF5D6376),
+        fontSize: 16,
+        fontWeight: FontWeight.w500,
+      ),
       selectedColor: AppColors.primary,
       backgroundColor: const Color(0xFFF0F2FF),
       side: BorderSide.none,
@@ -504,7 +628,10 @@ class _StrengthBars extends StatelessWidget {
           width: 20,
           height: 6,
           margin: const EdgeInsets.only(left: 5),
-          decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(4)),
+          decoration: BoxDecoration(
+            color: AppColors.primary,
+            borderRadius: BorderRadius.circular(4),
+          ),
         ),
       ),
     );
@@ -523,11 +650,25 @@ class _RegistrationBrandMark extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(25),
-        boxShadow: [BoxShadow(color: AppColors.primary.withValues(alpha: 0.2), blurRadius: 22, spreadRadius: 4, offset: const Offset(0, 9))],
+        boxShadow: [
+          BoxShadow(
+            color: AppColors.primary.withValues(alpha: 0.2),
+            blurRadius: 22,
+            spreadRadius: 4,
+            offset: const Offset(0, 9),
+          ),
+        ],
       ),
       child: DecoratedBox(
-        decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-        child: const Icon(Icons.sports_tennis_rounded, color: Colors.white, size: 50),
+        decoration: BoxDecoration(
+          color: AppColors.primary,
+          borderRadius: BorderRadius.circular(20),
+        ),
+        child: const Icon(
+          Icons.sports_tennis_rounded,
+          color: Colors.white,
+          size: 50,
+        ),
       ),
     );
   }
@@ -540,13 +681,24 @@ class _RegistrationBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 17, vertical: 9),
-      decoration: BoxDecoration(color: const Color(0xFFE0E7FF), borderRadius: BorderRadius.circular(24)),
+      decoration: BoxDecoration(
+        color: const Color(0xFFE0E7FF),
+        borderRadius: BorderRadius.circular(24),
+      ),
       child: const Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(Icons.bolt_rounded, color: AppColors.primary, size: 20),
           SizedBox(width: 7),
-          Text('ATHLETE REGISTRATION', style: TextStyle(color: AppColors.primary, fontSize: 15, fontWeight: FontWeight.w700, letterSpacing: 0.4)),
+          Text(
+            'ATHLETE REGISTRATION',
+            style: TextStyle(
+              color: AppColors.primary,
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.4,
+            ),
+          ),
         ],
       ),
     );
@@ -561,7 +713,17 @@ class _ConnectDivider extends StatelessWidget {
     return Row(
       children: const [
         Expanded(child: Divider(color: Color(0xFFDDE2F2))),
-        Padding(padding: EdgeInsets.symmetric(horizontal: 12), child: Text('OR REGISTER WITH', style: TextStyle(color: Color(0xFF858B9D), fontSize: 15, fontWeight: FontWeight.w700))),
+        Padding(
+          padding: EdgeInsets.symmetric(horizontal: 12),
+          child: Text(
+            'OR REGISTER WITH',
+            style: TextStyle(
+              color: Color(0xFF858B9D),
+              fontSize: 15,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ),
         Expanded(child: Divider(color: Color(0xFFDDE2F2))),
       ],
     );
@@ -595,8 +757,17 @@ class _RegisterSocial extends StatelessWidget {
     return SizedBox(
       height: 72,
       child: TextButton(
-        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Social registration is coming soon.'))),
-        style: TextButton.styleFrom(backgroundColor: Colors.white, foregroundColor: const Color(0xFF11182D), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)), textStyle: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700)),
+        onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Social registration is coming soon.')),
+        ),
+        style: TextButton.styleFrom(
+          backgroundColor: Colors.white,
+          foregroundColor: const Color(0xFF11182D),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
+          textStyle: const TextStyle(fontSize: 25, fontWeight: FontWeight.w700),
+        ),
         child: Text(label),
       ),
     );
@@ -604,7 +775,12 @@ class _RegisterSocial extends StatelessWidget {
 }
 
 class _RoleOption extends StatelessWidget {
-  const _RoleOption({required this.label, required this.icon, required this.selected, required this.onTap});
+  const _RoleOption({
+    required this.label,
+    required this.icon,
+    required this.selected,
+    required this.onTap,
+  });
 
   final String label;
   final IconData icon;
@@ -625,9 +801,20 @@ class _RoleOption extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 20, color: selected ? Colors.white : AppColors.primary),
+            Icon(
+              icon,
+              size: 20,
+              color: selected ? Colors.white : AppColors.primary,
+            ),
             const SizedBox(width: 8),
-            Text(label, style: TextStyle(color: selected ? Colors.white : const Color(0xFF11182D), fontWeight: FontWeight.w700, fontSize: 15)),
+            Text(
+              label,
+              style: TextStyle(
+                color: selected ? Colors.white : const Color(0xFF11182D),
+                fontWeight: FontWeight.w700,
+                fontSize: 15,
+              ),
+            ),
           ],
         ),
       ),

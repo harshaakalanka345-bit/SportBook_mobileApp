@@ -10,12 +10,36 @@ import '../features/auth/profile_screen.dart';
 class MainWrapper extends StatefulWidget {
   const MainWrapper({super.key});
 
+  static final ValueNotifier<int?> _tabRequest = ValueNotifier<int?>(null);
+
+  static void selectTab(int index) => _tabRequest.value = index;
+
   @override
   State<MainWrapper> createState() => _MainWrapperState();
 }
 
 class _MainWrapperState extends State<MainWrapper> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    MainWrapper._tabRequest.addListener(_applyTabRequest);
+  }
+
+  @override
+  void dispose() {
+    MainWrapper._tabRequest.removeListener(_applyTabRequest);
+    super.dispose();
+  }
+
+  void _applyTabRequest() {
+    final requestedIndex = MainWrapper._tabRequest.value;
+    if (requestedIndex == null) return;
+    MainWrapper._tabRequest.value = null;
+    if (requestedIndex < 0 || requestedIndex >= _tabs.length) return;
+    if (mounted) setState(() => _index = requestedIndex);
+  }
 
   static const _tabs = [
     DashboardScreen(),

@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -60,8 +59,8 @@ Future<void> addToCalendar({required String title, required DateTime start, requ
     'action': 'TEMPLATE',
     'text': title,
     'dates': '${fmt(start)}/${fmt(end)}',
-    if (location != null) 'location': location,
-    if (details != null) 'details': details,
+    'location': ?location,
+    'details': ?details,
   });
   if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) toast('Could not open the calendar.');
 }

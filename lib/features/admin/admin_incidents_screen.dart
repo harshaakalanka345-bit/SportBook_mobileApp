@@ -43,7 +43,21 @@ class _AdminIncidentsScreenState extends State<AdminIncidentsScreen> {
     }
   }
 
-  List<Map<String, dynamic>> get _visible => _filter == 'all' ? _incidents : _incidents.where((i) => i['status'] == _filter).toList();
+  List<Map<String, dynamic>> get _visible {
+    final items = _filter == 'all' ? [..._incidents] : _incidents.where((i) => i['status'] == _filter).toList();
+    int priority(Map<String, dynamic> incident) => switch ('${incident['severity']}') {
+          'High' => 0,
+          'Medium' => 1,
+          _ => 2,
+        };
+    items.sort((a, b) {
+      final severityOrder = priority(a).compareTo(priority(b));
+      if (severityOrder != 0) return severityOrder;
+      return (DateTime.tryParse('${b['created_at']}') ?? DateTime(0))
+          .compareTo(DateTime.tryParse('${a['created_at']}') ?? DateTime(0));
+    });
+    return items;
+  }
 
   int _count(String status) => _incidents.where((i) => i['status'] == status).length;
 
@@ -219,7 +233,7 @@ class _AdminIncidentsScreenState extends State<AdminIncidentsScreen> {
           const SizedBox(height: 10),
           ClipRRect(
             borderRadius: BorderRadius.circular(12),
-            child: Image.network('${i['photo_url']}', height: 160, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, __, ___) => const SizedBox.shrink()),
+            child: Image.network('${i['photo_url']}', height: 160, width: double.infinity, fit: BoxFit.cover, errorBuilder: (_, _, _) => const SizedBox.shrink()),
           ),
         ],
         if ((i['resolution_note'] as String?)?.isNotEmpty ?? false) ...[

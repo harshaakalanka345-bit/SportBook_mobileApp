@@ -22,7 +22,9 @@ class OnboardingScreen4 extends StatelessWidget {
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 44),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 44,
+                ),
                 child: Column(
                   children: [
                     Row(
@@ -116,7 +118,10 @@ class OnboardingScreen4 extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: () => _openRegistration(context),
                         icon: const Text('Get Started Now'),
-                        label: const Icon(Icons.rocket_launch_outlined, size: 25),
+                        label: const Icon(
+                          Icons.rocket_launch_outlined,
+                          size: 25,
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
@@ -172,21 +177,18 @@ class OnboardingScreen4 extends StatelessWidget {
   }
 
   void _openApp(BuildContext context) {
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => const AuthScreen()),
-    );
+    Navigator.of(context)
+        .pushReplacement(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
   void _openLogin(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AuthScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 
   void _openRegistration(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RegistrationScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const RegistrationScreen()));
   }
 }
 
@@ -261,7 +263,7 @@ class _AccessHero extends StatelessWidget {
               left: 24,
               child: _AccessHeroPill(
                 leading: Icon(Icons.circle, color: AppColors.primary, size: 14),
-                label: 'Zero-Contact Entry • PIN: 8492',
+                label: 'Your booking pass includes an entry PIN',
               ),
             ),
             Positioned(
@@ -269,7 +271,10 @@ class _AccessHero extends StatelessWidget {
               right: 24,
               bottom: 24,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 18,
+                  vertical: 14,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.93),
                   borderRadius: BorderRadius.circular(28),
@@ -314,7 +319,10 @@ class _AccessHero extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 12,
+                      ),
                       decoration: BoxDecoration(
                         color: _Onboarding4Colors.pill,
                         borderRadius: BorderRadius.circular(24),

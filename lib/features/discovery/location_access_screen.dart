@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 
 import '../../core/app_theme.dart';
-import '../../core/actions.dart';
 import '../../core/location_service.dart';
 
 class LocationAccessScreen extends StatefulWidget {
@@ -16,7 +15,6 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
   static const _background = Color(0xFFFAF8FF);
   static const _ink = Color(0xFF11182D);
   static const _muted = Color(0xFF5D6376);
-  static const _softBlue = Color(0xFFE0E7FF);
 
   @override
   Widget build(BuildContext context) {
@@ -188,7 +186,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
     if (_requesting) return;
     setState(() => _requesting = true);
     final position = await requestCurrentLocation();
-    if (!mounted) return;
+    if (!mounted || !context.mounted) return;
     setState(() => _requesting = false);
     if (position != null) {
       Navigator.of(context).pop(LocationSelection(
@@ -223,7 +221,7 @@ class _LocationAccessScreenState extends State<LocationAccessScreen> {
     ).then((value) {
       controller.dispose();
       final area = value?.trim() ?? '';
-      if (!mounted || area.isEmpty) return;
+      if (!mounted || !context.mounted || area.isEmpty) return;
       Navigator.of(context).pop(LocationSelection(label: area.toUpperCase(), searchText: area));
     });
   }

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/actions.dart';
 import '../../core/app_config.dart';
 import '../../core/app_theme.dart';
+import '../../core/sports.dart';
 import '../../core/supabase_service.dart';
 import '../../core/toast.dart';
 import 'report_incident_screen.dart';
@@ -47,7 +48,13 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   List<FaqEntry> get _filteredFaqs {
     final q = _search.text.trim().toLowerCase();
     if (q.isEmpty) return faqs;
-    return faqs.where((f) => f.question.toLowerCase().contains(q) || f.answer.toLowerCase().contains(q)).toList();
+    return faqs
+        .where(
+          (f) =>
+              f.question.toLowerCase().contains(q) ||
+              f.answer.toLowerCase().contains(q),
+        )
+        .toList();
   }
 
   void _openReport({String? description}) {
@@ -76,7 +83,11 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       case _Channel.whatsapp:
         await openWhatsApp(AppConfig.supportWhatsApp, text);
       case _Channel.email:
-        await sendEmail(AppConfig.supportEmail, subject: 'SportsBook support request', body: text);
+        await sendEmail(
+          AppConfig.supportEmail,
+          subject: 'SportsBook support request',
+          body: text,
+        );
     }
   }
 
@@ -90,27 +101,63 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setLocal) => AlertDialog(
-          title: const Text('Suggest a New Venue', style: TextStyle(fontWeight: FontWeight.w800)),
+          title: const Text(
+            'Suggest a New Venue',
+            style: TextStyle(fontWeight: FontWeight.w800),
+          ),
           content: SingleChildScrollView(
             child: Form(
               key: key,
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                TextFormField(controller: name, textCapitalization: TextCapitalization.words, decoration: const InputDecoration(labelText: 'Venue name'), validator: (v) => (v ?? '').trim().length < 3 ? 'Enter the venue name' : null),
-                TextFormField(controller: area, decoration: const InputDecoration(labelText: 'Area (e.g. Colombo 05)'), validator: (v) => (v ?? '').trim().isEmpty ? 'Enter the area' : null),
-                const SizedBox(height: 8),
-                DropdownButtonFormField<String>(
-                  value: sport,
-                  decoration: const InputDecoration(labelText: 'Sport'),
-                  items: const ['Badminton', 'Tennis', 'Futsal', 'Basketball', 'Padel', 'Table Tennis', 'Swimming'].map((s) => DropdownMenuItem(value: s, child: Text(s))).toList(),
-                  onChanged: (v) => setLocal(() => sport = v ?? sport),
-                ),
-                TextFormField(controller: notes, maxLines: 3, decoration: const InputDecoration(labelText: 'Notes (address, contact, why it is great)')),
-              ]),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextFormField(
+                    controller: name,
+                    textCapitalization: TextCapitalization.words,
+                    decoration: const InputDecoration(labelText: 'Venue name'),
+                    validator: (v) => (v ?? '').trim().length < 3
+                        ? 'Enter the venue name'
+                        : null,
+                  ),
+                  TextFormField(
+                    controller: area,
+                    decoration: const InputDecoration(
+                      labelText: 'Area (e.g. Colombo 05)',
+                    ),
+                    validator: (v) =>
+                        (v ?? '').trim().isEmpty ? 'Enter the area' : null,
+                  ),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                    initialValue: sport,
+                    decoration: const InputDecoration(labelText: 'Sport'),
+                    items: [...kSports, 'Swimming']
+                        .map((s) => DropdownMenuItem(value: s, child: Text(s)))
+                        .toList(),
+                    onChanged: (v) => setLocal(() => sport = v ?? sport),
+                  ),
+                  TextFormField(
+                    controller: notes,
+                    maxLines: 3,
+                    decoration: const InputDecoration(
+                      labelText: 'Notes (address, contact, why it is great)',
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
-            FilledButton(onPressed: () { if (key.currentState!.validate()) Navigator.pop(ctx, true); }, child: const Text('Submit')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () {
+                if (key.currentState!.validate()) Navigator.pop(ctx, true);
+              },
+              child: const Text('Submit'),
+            ),
           ],
         ),
       ),
@@ -123,7 +170,12 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
     notes.dispose();
     if (ok != true) return;
     try {
-      await SupabaseService().suggestVenue(name: n, area: a, sport: sport, notes: nt);
+      await SupabaseService().suggestVenue(
+        name: n,
+        area: a,
+        sport: sport,
+        notes: nt,
+      );
       toast('Thanks! We will review "$n" for onboarding.');
     } catch (e) {
       toast('Could not send suggestion: $e');
@@ -139,20 +191,53 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         backgroundColor: const Color(0xFFFAF8FF),
         elevation: 0,
         titleSpacing: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back, color: ink, size: 20), onPressed: () => Navigator.pop(context)),
-        title: Row(children: [
-          Container(padding: const EdgeInsets.all(4), decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(6)), child: const Icon(Icons.sports_baseball, color: Colors.white, size: 14)),
-          const SizedBox(width: 8),
-          const Expanded(child: Text('Help & Support', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w700), overflow: TextOverflow.ellipsis)),
-        ]),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back, color: ink, size: 20),
+          onPressed: () => Navigator.pop(context),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                color: AppColors.primary,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Icon(
+                Icons.sports_baseball,
+                color: Colors.white,
+                size: 14,
+              ),
+            ),
+            const SizedBox(width: 8),
+            const Expanded(
+              child: Text(
+                'Help & Support',
+                style: TextStyle(
+                  color: ink,
+                  fontSize: 15,
+                  fontWeight: FontWeight.w700,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
         actions: [
-          IconButton(tooltip: 'Report a fault', icon: const Icon(Icons.flag_outlined, color: muted, size: 20), onPressed: () => _openReport()),
+          IconButton(
+            tooltip: 'Report a fault',
+            icon: const Icon(Icons.flag_outlined, color: muted, size: 20),
+            onPressed: () => _openReport(),
+          ),
           PopupMenuButton<String>(
             icon: const Icon(Icons.more_vert, color: muted, size: 20),
             onSelected: (v) {
               switch (v) {
                 case 'rules':
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => const RulesHelpScreen()));
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const RulesHelpScreen()),
+                  );
                 case 'venue':
                   _suggestVenue();
                 case 'report':
@@ -185,8 +270,14 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
           if (results.isEmpty)
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-              child: const Text('No help articles match your search. Try different words, or contact us above.', style: TextStyle(color: muted, fontSize: 13)),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: const Text(
+                'No help articles match your search. Try different words, or contact us above.',
+                style: TextStyle(color: muted, fontSize: 13),
+              ),
             )
           else
             for (final f in results) _faqItem(f),
@@ -201,53 +292,131 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   }
 
   Widget _searchBar() => Container(
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(30), boxShadow: const [BoxShadow(color: Color(0x05000000), blurRadius: 10, offset: Offset(0, 4))]),
-        child: TextField(
-          controller: _search,
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: 'Search issues, court rules, refund policy',
-            hintStyle: const TextStyle(color: muted, fontSize: 12),
-            prefixIcon: const Icon(Icons.search, color: muted, size: 18),
-            suffixIcon: _search.text.isEmpty ? null : IconButton(icon: const Icon(Icons.close, size: 18), onPressed: () => setState(_search.clear)),
-            border: InputBorder.none,
-            contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-          ),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(30),
+      boxShadow: const [
+        BoxShadow(
+          color: Color(0x05000000),
+          blurRadius: 10,
+          offset: Offset(0, 4),
         ),
-      );
+      ],
+    ),
+    child: TextField(
+      controller: _search,
+      onChanged: (_) => setState(() {}),
+      decoration: InputDecoration(
+        hintText: 'Search issues, court rules, refund policy',
+        hintStyle: const TextStyle(color: muted, fontSize: 12),
+        prefixIcon: const Icon(Icons.search, color: muted, size: 18),
+        suffixIcon: _search.text.isEmpty
+            ? null
+            : IconButton(
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: () => setState(_search.clear),
+              ),
+        border: InputBorder.none,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 20,
+          vertical: 14,
+        ),
+      ),
+    ),
+  );
 
   Widget _hotlineCard() {
     final phone = AppConfig.supportPhone;
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(colors: [Color(0xFFE5EDFF), Color(0xFFD0DDFB)], begin: Alignment.topLeft, end: Alignment.bottomRight),
+        gradient: const LinearGradient(
+          colors: [Color(0xFFE5EDFF), Color(0xFFD0DDFB)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
         borderRadius: BorderRadius.circular(16),
       ),
-      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Container(padding: const EdgeInsets.all(10), decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle), child: const Icon(Icons.phone_in_talk, color: Colors.white, size: 18)),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Row(children: [
-              Icon(Icons.circle, size: 6, color: Color(0xFF10B981)),
-              SizedBox(width: 4),
-              Text('24/7 COURT OPS HOTLINE', style: TextStyle(color: AppColors.primary, fontSize: 10, fontWeight: FontWeight.w800)),
-            ]),
-            const SizedBox(height: 8),
-            const Text('Need immediate help with lights or gate access?', style: TextStyle(color: ink, fontSize: 15, fontWeight: FontWeight.w800, height: 1.25)),
-            const SizedBox(height: 6),
-            Text(phone.isEmpty ? 'Hotline number not set up yet' : phone, style: const TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)),
-          ]),
-        ),
-        const SizedBox(width: 8),
-        FilledButton.icon(
-          onPressed: () => callNumber(phone),
-          icon: const Icon(Icons.call, size: 14),
-          label: const Text('Call Now', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600)),
-          style: FilledButton.styleFrom(backgroundColor: AppColors.primary, foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10), minimumSize: Size.zero, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20))),
-        ),
-      ]),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              color: AppColors.primary,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.phone_in_talk,
+              color: Colors.white,
+              size: 18,
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.circle, size: 6, color: Color(0xFF10B981)),
+                    const SizedBox(width: 4),
+                    Text(
+                      phone.isEmpty
+                          ? 'SUPPORT PHONE NOT SET UP'
+                          : 'SUPPORT PHONE',
+                      style: TextStyle(
+                        color: AppColors.primary,
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  phone.isEmpty
+                      ? 'Use the incident report or message form to contact support.'
+                      : 'Call support about a venue or booking issue.',
+                  style: TextStyle(
+                    color: ink,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                    height: 1.25,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  phone.isEmpty ? 'Hotline number not set up yet' : phone,
+                  style: const TextStyle(
+                    color: AppColors.primary,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          FilledButton.icon(
+            onPressed: phone.isEmpty ? null : () => callNumber(phone),
+            icon: const Icon(Icons.call, size: 14),
+            label: Text(
+              phone.isEmpty ? 'Unavailable' : 'Call Now',
+              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+            style: FilledButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              minimumSize: Size.zero,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -262,42 +431,94 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
       _Channel.whatsapp => 'Open WhatsApp',
       _Channel.email => 'Open Email',
     };
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      const Text('WHO WOULD YOU LIKE TO TALK TO?', style: TextStyle(color: muted, fontSize: 10, fontWeight: FontWeight.w800)),
-      const SizedBox(height: 10),
-      Row(children: [
-        Expanded(child: _contactCard(_Channel.marshal, Icons.support_agent_rounded, 'Chat Marshal', 'Venue manager')),
-        const SizedBox(width: 8),
-        Expanded(child: _contactCard(_Channel.whatsapp, Icons.chat_bubble_outline_rounded, 'WhatsApp', 'Player line')),
-        const SizedBox(width: 8),
-        Expanded(child: _contactCard(_Channel.email, Icons.email_outlined, 'Email Us', 'Formal inquiries')),
-      ]),
-      const SizedBox(height: 12),
-      Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          TextField(
-            controller: _message,
-            maxLines: 3,
-            decoration: InputDecoration(hintText: 'Type your message…', border: InputBorder.none, helperText: hint, helperMaxLines: 2),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'WHO WOULD YOU LIKE TO TALK TO?',
+          style: TextStyle(
+            color: muted,
+            fontSize: 10,
+            fontWeight: FontWeight.w800,
           ),
-          const SizedBox(height: 8),
-          Align(
-            alignment: Alignment.centerRight,
-            child: FilledButton.icon(
-              onPressed: _sendMessage,
-              icon: const Icon(Icons.send_rounded, size: 16),
-              label: Text(sendLabel),
-              style: FilledButton.styleFrom(backgroundColor: AppColors.primary, shape: const StadiumBorder()),
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
+            Expanded(
+              child: _contactCard(
+                _Channel.marshal,
+                Icons.support_agent_rounded,
+                'Chat Marshal',
+                'Venue manager',
+              ),
             ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _contactCard(
+                _Channel.whatsapp,
+                Icons.chat_bubble_outline_rounded,
+                'WhatsApp',
+                'Player line',
+              ),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: _contactCard(
+                _Channel.email,
+                Icons.email_outlined,
+                'Email Us',
+                'Formal inquiries',
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        Container(
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16),
           ),
-        ]),
-      ),
-    ]);
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              TextField(
+                controller: _message,
+                maxLines: 3,
+                decoration: InputDecoration(
+                  hintText: 'Type your message…',
+                  border: InputBorder.none,
+                  helperText: hint,
+                  helperMaxLines: 2,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton.icon(
+                  onPressed: _sendMessage,
+                  icon: const Icon(Icons.send_rounded, size: 16),
+                  label: Text(sendLabel),
+                  style: FilledButton.styleFrom(
+                    backgroundColor: AppColors.primary,
+                    shape: const StadiumBorder(),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
   }
 
-  Widget _contactCard(_Channel channel, IconData icon, String title, String subtitle) {
+  Widget _contactCard(
+    _Channel channel,
+    IconData icon,
+    String title,
+    String subtitle,
+  ) {
     final selected = _channel == channel;
     return InkWell(
       borderRadius: BorderRadius.circular(16),
@@ -307,15 +528,38 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
         decoration: BoxDecoration(
           color: selected ? AppColors.primary : Colors.white,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? AppColors.primary : const Color(0xFFE9EEFF)),
+          border: Border.all(
+            color: selected ? AppColors.primary : const Color(0xFFE9EEFF),
+          ),
         ),
-        child: Column(children: [
-          Icon(icon, color: selected ? Colors.white : AppColors.primary, size: 22),
-          const SizedBox(height: 8),
-          Text(title, style: TextStyle(color: selected ? Colors.white : ink, fontSize: 11, fontWeight: FontWeight.w700)),
-          const SizedBox(height: 2),
-          Text(subtitle, textAlign: TextAlign.center, style: TextStyle(color: selected ? Colors.white70 : muted, fontSize: 9, fontWeight: FontWeight.w600)),
-        ]),
+        child: Column(
+          children: [
+            Icon(
+              icon,
+              color: selected ? Colors.white : AppColors.primary,
+              size: 22,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              title,
+              style: TextStyle(
+                color: selected ? Colors.white : ink,
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                color: selected ? Colors.white70 : muted,
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -323,125 +567,312 @@ class _HelpSupportScreenState extends State<HelpSupportScreen> {
   Widget _reportPanel() {
     return Container(
       padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(padding: const EdgeInsets.all(8), decoration: BoxDecoration(color: const Color(0xFFFFE5E5), borderRadius: BorderRadius.circular(8)), child: const Icon(Icons.warning_amber_rounded, color: Color(0xFFDC2626), size: 18)),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Text('Report a Fault', style: TextStyle(color: ink, fontSize: 16, fontWeight: FontWeight.w800)),
-              Text('Tell the venue manager about court issues', style: TextStyle(color: muted, fontSize: 11)),
-            ]),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFE5E5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.warning_amber_rounded,
+                  color: Color(0xFFDC2626),
+                  size: 18,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Report a Fault',
+                      style: TextStyle(
+                        color: ink,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    Text(
+                      'Tell the venue manager about court issues',
+                      style: TextStyle(color: muted, fontSize: 11),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-        ]),
-        const SizedBox(height: 18),
-        const Text('SELECT INCIDENT TYPE', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 10),
-        Wrap(spacing: 8, runSpacing: 8, children: [
-          for (final e in _incidentTypes.entries)
-            ChoiceChip(
-              avatar: Icon(e.value.$1, size: 14, color: _selectedIncident == e.key ? Colors.white : AppColors.primary),
-              label: Text(e.key, style: const TextStyle(fontSize: 11)),
-              selected: _selectedIncident == e.key,
-              showCheckmark: false,
-              selectedColor: AppColors.primary,
-              labelStyle: TextStyle(color: _selectedIncident == e.key ? Colors.white : ink, fontWeight: FontWeight.w600),
-              onSelected: (_) => setState(() => _selectedIncident = e.key),
+          const SizedBox(height: 18),
+          const Text(
+            'SELECT INCIDENT TYPE',
+            style: TextStyle(
+              color: muted,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
             ),
-        ]),
-        const SizedBox(height: 18),
-        const Text('URGENCY LEVEL', style: TextStyle(color: muted, fontSize: 9, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 10),
-        SegmentedButton<bool>(
-          segments: const [
-            ButtonSegment(value: true, label: Text('Active game halted', style: TextStyle(fontSize: 11))),
-            ButtonSegment(value: false, label: Text('General maintenance', style: TextStyle(fontSize: 11))),
-          ],
-          selected: {_haltedGame},
-          onSelectionChanged: (s) => setState(() => _haltedGame = s.first),
-        ),
-        const SizedBox(height: 18),
-        InkWell(
-          borderRadius: BorderRadius.circular(12),
-          onTap: () => _openReport(),
-          child: Container(
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final e in _incidentTypes.entries)
+                ChoiceChip(
+                  avatar: Icon(
+                    e.value.$1,
+                    size: 14,
+                    color: _selectedIncident == e.key
+                        ? Colors.white
+                        : AppColors.primary,
+                  ),
+                  label: Text(e.key, style: const TextStyle(fontSize: 11)),
+                  selected: _selectedIncident == e.key,
+                  showCheckmark: false,
+                  selectedColor: AppColors.primary,
+                  labelStyle: TextStyle(
+                    color: _selectedIncident == e.key ? Colors.white : ink,
+                    fontWeight: FontWeight.w600,
+                  ),
+                  onSelected: (_) => setState(() => _selectedIncident = e.key),
+                ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          const Text(
+            'URGENCY LEVEL',
+            style: TextStyle(
+              color: muted,
+              fontSize: 9,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+          const SizedBox(height: 10),
+          SegmentedButton<bool>(
+            segments: const [
+              ButtonSegment(
+                value: true,
+                label: Text(
+                  'Active game halted',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+              ButtonSegment(
+                value: false,
+                label: Text(
+                  'General maintenance',
+                  style: TextStyle(fontSize: 11),
+                ),
+              ),
+            ],
+            selected: {_haltedGame},
+            onSelectionChanged: (s) => setState(() => _haltedGame = s.first),
+          ),
+          const SizedBox(height: 18),
+          InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () => _openReport(),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(vertical: 20),
+              decoration: BoxDecoration(
+                color: softBlue,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Column(
+                children: [
+                  Icon(
+                    Icons.camera_alt_outlined,
+                    color: AppColors.primary,
+                    size: 22,
+                  ),
+                  SizedBox(height: 8),
+                  Text(
+                    '+ Add Photo of Court Issue',
+                    style: TextStyle(
+                      color: ink,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  Text(
+                    'Helps floor marshals bring proper gear',
+                    style: TextStyle(color: muted, fontSize: 10),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          SizedBox(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 20),
-            decoration: BoxDecoration(color: softBlue, borderRadius: BorderRadius.circular(12)),
-            child: const Column(children: [
-              Icon(Icons.camera_alt_outlined, color: AppColors.primary, size: 22),
-              SizedBox(height: 8),
-              Text('+ Add Photo of Court Issue', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-              Text('Helps floor marshals bring proper gear', style: TextStyle(color: muted, fontSize: 10)),
-            ]),
+            child: FilledButton.icon(
+              onPressed: () => _openReport(),
+              icon: const Icon(Icons.send_rounded, size: 16),
+              label: const Text(
+                'Submit Report to Arena Manager',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+              ),
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF0D6EFD),
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(vertical: 14),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(30),
+                ),
+              ),
+            ),
           ),
-        ),
-        const SizedBox(height: 16),
-        SizedBox(
-          width: double.infinity,
-          child: FilledButton.icon(
-            onPressed: () => _openReport(),
-            icon: const Icon(Icons.send_rounded, size: 16),
-            label: const Text('Submit Report to Arena Manager', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-            style: FilledButton.styleFrom(backgroundColor: const Color(0xFF0D6EFD), foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(vertical: 14), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))),
-          ),
-        ),
-      ]),
+        ],
+      ),
     );
   }
 
-  Widget _faqHeader() => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Expanded(child: Text('Frequently Asked\nQuestions', style: TextStyle(color: ink, fontSize: 20, fontWeight: FontWeight.w800, height: 1.15))),
-        TextButton(
-          onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RulesHelpScreen())),
-          child: const Text('Rules & Help →', style: TextStyle(color: AppColors.primary, fontSize: 12, fontWeight: FontWeight.w700)),
-        ),
-      ]);
-
-  Widget _faqItem(FaqEntry f) => Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(14)),
-        child: Theme(
-          data: ThemeData(dividerColor: Colors.transparent),
-          child: ExpansionTile(
-            tilePadding: const EdgeInsets.symmetric(horizontal: 14),
-            childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
-            expandedCrossAxisAlignment: CrossAxisAlignment.start,
-            leading: Icon(f.icon, color: AppColors.primary, size: 20),
-            title: Text(f.question, style: const TextStyle(color: ink, fontSize: 12, fontWeight: FontWeight.w600)),
-            children: [Text(f.answer, style: const TextStyle(color: muted, fontSize: 12, height: 1.5))],
+  Widget _faqHeader() => Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      const Expanded(
+        child: Text(
+          'Frequently Asked\nQuestions',
+          style: TextStyle(
+            color: ink,
+            fontSize: 20,
+            fontWeight: FontWeight.w800,
+            height: 1.15,
           ),
         ),
-      );
+      ),
+      TextButton(
+        onPressed: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => const RulesHelpScreen()),
+        ),
+        child: const Text(
+          'Rules & Help →',
+          style: TextStyle(
+            color: AppColors.primary,
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ),
+    ],
+  );
+
+  Widget _faqItem(FaqEntry f) => Container(
+    margin: const EdgeInsets.only(bottom: 8),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      borderRadius: BorderRadius.circular(14),
+    ),
+    child: Theme(
+      data: ThemeData(dividerColor: Colors.transparent),
+      child: ExpansionTile(
+        tilePadding: const EdgeInsets.symmetric(horizontal: 14),
+        childrenPadding: const EdgeInsets.fromLTRB(14, 0, 14, 14),
+        expandedCrossAxisAlignment: CrossAxisAlignment.start,
+        leading: Icon(f.icon, color: AppColors.primary, size: 20),
+        title: Text(
+          f.question,
+          style: const TextStyle(
+            color: ink,
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        children: [
+          Text(
+            f.answer,
+            style: const TextStyle(color: muted, fontSize: 12, height: 1.5),
+          ),
+        ],
+      ),
+    ),
+  );
 
   Widget _suggestCard() => InkWell(
+    borderRadius: BorderRadius.circular(16),
+    onTap: _suggestVenue,
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: const Color(0xFFEEF2FF),
         borderRadius: BorderRadius.circular(16),
-        onTap: _suggestVenue,
-        child: Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFFEEF2FF), borderRadius: BorderRadius.circular(16)),
-          child: Row(children: [
-            Container(padding: const EdgeInsets.all(10), decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle), child: const Icon(Icons.add_location_alt_outlined, color: AppColors.primary, size: 20)),
-            const SizedBox(width: 12),
-            const Expanded(
-              child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Suggest a New Venue in Colombo', style: TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w700)),
-                Text('Know a court, pitch, or swimming pool we should onboard?', style: TextStyle(color: muted, fontSize: 11)),
-              ]),
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              shape: BoxShape.circle,
             ),
-            const Icon(Icons.chevron_right_rounded, color: muted),
-          ]),
-        ),
-      );
+            child: const Icon(
+              Icons.add_location_alt_outlined,
+              color: AppColors.primary,
+              size: 20,
+            ),
+          ),
+          const SizedBox(width: 12),
+          const Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Suggest a New Venue in Colombo',
+                  style: TextStyle(
+                    color: ink,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                Text(
+                  'Know a court, pitch, or swimming pool we should onboard?',
+                  style: TextStyle(color: muted, fontSize: 11),
+                ),
+              ],
+            ),
+          ),
+          const Icon(Icons.chevron_right_rounded, color: muted),
+        ],
+      ),
+    ),
+  );
 
-  Widget _footer() => const Column(children: [
-        Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-          Icon(Icons.verified_user_outlined, size: 14, color: AppColors.primary),
+  Widget _footer() => const Column(
+    children: [
+      Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(
+            Icons.verified_user_outlined,
+            size: 14,
+            color: AppColors.primary,
+          ),
           SizedBox(width: 6),
-          Text('Colombo Sports Authority (CSA)', style: TextStyle(color: ink, fontSize: 11, fontWeight: FontWeight.w700)),
-        ]),
-        SizedBox(height: 6),
-        Text('SportsBook Help Center • Version 2.4.0', style: TextStyle(color: muted, fontSize: 10)),
-      ]);
+          Text(
+            'Colombo Sports Authority (CSA)',
+            style: TextStyle(
+              color: ink,
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+            ),
+          ),
+        ],
+      ),
+      SizedBox(height: 6),
+      Text(
+        'SportsBook Help Center • Version 2.4.0',
+        style: TextStyle(color: muted, fontSize: 10),
+      ),
+    ],
+  );
 }

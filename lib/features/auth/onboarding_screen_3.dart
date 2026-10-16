@@ -22,7 +22,9 @@ class OnboardingScreen3 extends StatelessWidget {
             return SingleChildScrollView(
               padding: const EdgeInsets.fromLTRB(20, 22, 20, 22),
               child: ConstrainedBox(
-                constraints: BoxConstraints(minHeight: constraints.maxHeight - 44),
+                constraints: BoxConstraints(
+                  minHeight: constraints.maxHeight - 44,
+                ),
                 child: Column(
                   children: [
                     Row(
@@ -67,7 +69,11 @@ class OnboardingScreen3 extends StatelessWidget {
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.share_outlined, color: AppColors.primary, size: 21),
+                          Icon(
+                            Icons.share_outlined,
+                            color: AppColors.primary,
+                            size: 21,
+                          ),
                           SizedBox(width: 8),
                           Text(
                             'SQUAD & SPLIT',
@@ -132,7 +138,10 @@ class OnboardingScreen3 extends StatelessWidget {
                       child: FilledButton.icon(
                         onPressed: () => _openFourthPage(context),
                         icon: const Text('Next'),
-                        label: const Icon(Icons.arrow_forward_rounded, size: 28),
+                        label: const Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 28,
+                        ),
                         style: FilledButton.styleFrom(
                           backgroundColor: AppColors.primary,
                           foregroundColor: Colors.white,
@@ -172,7 +181,7 @@ class OnboardingScreen3 extends StatelessWidget {
                         Icon(Icons.shield_outlined, color: _muted, size: 20),
                         SizedBox(width: 8),
                         Text(
-                          'OFFICIAL PARTNER • COLOMBO SPORTS AUTHORITY',
+                          'SportsBook courts and community',
                           style: TextStyle(
                             color: _muted,
                             fontSize: 13,
@@ -205,9 +214,8 @@ class OnboardingScreen3 extends StatelessWidget {
   }
 
   void _openLogin(BuildContext context) {
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const AuthScreen()),
-    );
+    Navigator.of(context)
+        .push(MaterialPageRoute(builder: (_) => const AuthScreen()));
   }
 }
 
@@ -281,7 +289,11 @@ class _SquadHero extends StatelessWidget {
               top: 28,
               left: 26,
               child: _HeroPill(
-                leading: Icon(Icons.groups_rounded, color: AppColors.primary, size: 23),
+                leading: Icon(
+                  Icons.groups_rounded,
+                  color: AppColors.primary,
+                  size: 23,
+                ),
                 label: 'Instant Squad Split  •  4 PLAYERS',
               ),
             ),
@@ -290,7 +302,10 @@ class _SquadHero extends StatelessWidget {
               right: 28,
               bottom: 24,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 13),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 13,
+                ),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: 0.92),
                   borderRadius: BorderRadius.circular(28),
@@ -301,63 +316,70 @@ class _SquadHero extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                    const SizedBox(
-                      width: 160,
-                      height: 48,
-                      child: Stack(
-                        children: [
-                          _Avatar(letter: 'S', left: 0),
-                          _Avatar(letter: 'A', left: 36),
-                          _Avatar(letter: 'D', left: 72, muted: true),
-                          _Avatar(letter: 'K', left: 108),
-                        ],
+                      const SizedBox(
+                        width: 160,
+                        height: 48,
+                        child: Stack(
+                          children: [
+                            _Avatar(letter: 'S', left: 0),
+                            _Avatar(letter: 'A', left: 36),
+                            _Avatar(letter: 'D', left: 72, muted: true),
+                            _Avatar(letter: 'K', left: 108),
+                          ],
+                        ),
                       ),
-                    ),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(horizontal: 12),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'TOTAL SHARE',
-                            style: TextStyle(
-                              color: OnboardingScreen3._muted,
-                              fontSize: 14,
+                      const Padding(
+                        padding: EdgeInsets.symmetric(horizontal: 12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'TOTAL SHARE',
+                              style: TextStyle(
+                                color: OnboardingScreen3._muted,
+                                fontSize: 14,
+                              ),
                             ),
-                          ),
-                          Text(
-                            '\$12.50/ea',
-                            style: TextStyle(
+                            Text(
+                              '\$12.50/ea',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 20,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 15,
+                          vertical: 13,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _Onboarding3Colors.pill,
+                          borderRadius: BorderRadius.circular(24),
+                        ),
+                        child: const Row(
+                          children: [
+                            Icon(
+                              Icons.bolt_rounded,
                               color: AppColors.primary,
-                              fontSize: 20,
-                              fontWeight: FontWeight.w700,
+                              size: 21,
                             ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 13),
-                      decoration: BoxDecoration(
-                        color: _Onboarding3Colors.pill,
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.bolt_rounded, color: AppColors.primary, size: 21),
-                          SizedBox(width: 4),
-                          Text(
-                            'AUTO PAY',
-                            style: TextStyle(
-                              color: AppColors.primary,
-                              fontSize: 14,
-                              fontWeight: FontWeight.w700,
+                            SizedBox(width: 4),
+                            Text(
+                              'AUTO PAY',
+                              style: TextStyle(
+                                color: AppColors.primary,
+                                fontSize: 14,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
                     ],
                   ),
                 ),
@@ -426,7 +448,11 @@ class _Avatar extends StatelessWidget {
         ),
         child: Text(
           letter,
-          style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 17,
+            fontWeight: FontWeight.w600,
+          ),
         ),
       ),
     );

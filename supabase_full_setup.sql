@@ -1,5 +1,5 @@
 -- ==============================================================================
--- SPORTSBOOK - COMPLETE SUPABASE SETUP (base schema + migration 002 + migration 003)
+-- SPORTSBOOK - COMPLETE SUPABASE SETUP (base schema + migrations 002-004)
 -- Paste into Supabase > SQL Editor > New query and click Run. Safe to re-run.
 -- ==============================================================================
 
@@ -42,7 +42,12 @@ VALUES
     ('ven-03', 'CR & FC Outdoor Courts', 'Tennis', 'Outdoor', 'Colombo 07', 2500, 'Malalasekara Mawatha, Colombo 07', ARRAY['Floodlights', 'Parking', 'Club House']),
     ('ven-04', 'Bambalapitiya Smash Courts', 'Badminton', 'Indoor', 'Colombo 04', 1600, 'Galle Road, Colombo 04', ARRAY['Air Conditioned', 'Changing Rooms', 'Refreshments']),
     ('ven-05', 'Futsal World Colombo', 'Futsal', 'Indoor', 'Colombo 10', 3200, 'T.B. Jayah Mawatha, Colombo 10', ARRAY['Locker Rooms', 'Showers', 'Parking', 'Floodlights']),
-    ('ven-06', 'Otters Aquatic Club Tennis', 'Tennis', 'Outdoor', 'Colombo 07', 2200, 'Bauddhaloka Mawatha, Colombo 07', ARRAY['Floodlights', 'Showers', 'Cafeteria'])
+    ('ven-06', 'Otters Aquatic Club Tennis', 'Tennis', 'Outdoor', 'Colombo 07', 2200, 'Bauddhaloka Mawatha, Colombo 07', ARRAY['Floodlights', 'Showers', 'Cafeteria']),
+    ('ven-07', 'Colombo Cricket Nets', 'Cricket', 'Outdoor', 'Colombo 05', 3000, 'Havelock Road, Colombo 05', ARRAY['Parking', 'Changing Rooms', 'Floodlights']),
+    ('ven-08', 'Colombo Hoop Arena', 'Basketball', 'Indoor', 'Colombo 03', 2800, 'Duplication Road, Colombo 03', ARRAY['Air Conditioned', 'Changing Rooms', 'Drinking Water']),
+    ('ven-09', 'Padel Colombo', 'Padel', 'Outdoor', 'Colombo 02', 3500, 'Union Place, Colombo 02', ARRAY['Parking', 'Floodlights', 'Showers']),
+    ('ven-10', 'Colombo Table Tennis Centre', 'Table Tennis', 'Indoor', 'Colombo 06', 1800, 'Marine Drive, Colombo 06', ARRAY['Air Conditioned', 'Changing Rooms', 'Cafeteria']),
+    ('ven-11', 'Colombo Squash Centre', 'Squash', 'Indoor', 'Colombo 03', 2200, 'Alfred House Gardens, Colombo 03', ARRAY['Air Conditioned', 'Changing Rooms', 'Showers'])
 ON CONFLICT (id) DO UPDATE SET
     environment = EXCLUDED.environment,
     sport = EXCLUDED.sport,
@@ -54,7 +59,7 @@ ON CONFLICT (id) DO UPDATE SET
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL DEFAULT 'SportsBook Member',
-    wallet_balance NUMERIC NOT NULL DEFAULT 2500,
+    wallet_balance NUMERIC NOT NULL DEFAULT 0,
     email TEXT,
     phone TEXT,
     avatar_url TEXT,
@@ -99,7 +104,7 @@ BEGIN
         ALTER TABLE public.profiles ADD COLUMN full_name TEXT NOT NULL DEFAULT 'SportsBook Member';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'wallet_balance') THEN
-        ALTER TABLE public.profiles ADD COLUMN wallet_balance NUMERIC NOT NULL DEFAULT 2500;
+        ALTER TABLE public.profiles ADD COLUMN wallet_balance NUMERIC NOT NULL DEFAULT 0;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'email') THEN
         ALTER TABLE public.profiles ADD COLUMN email TEXT;
@@ -108,6 +113,8 @@ BEGIN
         ALTER TABLE public.profiles ADD COLUMN phone TEXT;
     END IF;
 END $$;
+
+ALTER TABLE public.profiles ALTER COLUMN wallet_balance SET DEFAULT 0;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -207,14 +214,27 @@ CREATE POLICY "Allow create and update courts"
     ON public.courts FOR ALL
     USING (true);
 
--- Seed initial courts for ven-01
+-- Seed bookable sample courts for every sport. The pair check keeps this safe to rerun.
 INSERT INTO public.courts (venue_id, name, type)
-SELECT * FROM (VALUES
+SELECT sample.venue_id, sample.name, sample.type
+FROM (VALUES
     ('ven-01', 'Court 1', 'Premium Teak Parquet Floor'),
-    ('ven-01', 'Court 2', 'Synthetic Indoor Shoe Rubber')
-
-) AS v(venue_id, name, type)
-WHERE NOT EXISTS (SELECT 1 FROM public.courts);
+    ('ven-01', 'Court 2', 'Synthetic Indoor Shoe Rubber'),
+    ('ven-02', 'Court 1', 'Synthetic Indoor Shoe Rubber'),
+    ('ven-03', 'Court 1', 'Hard Court Acrylic'),
+    ('ven-04', 'Court 1', 'Wooden Parquet'),
+    ('ven-05', 'Pitch 1', 'Synthetic Turf'),
+    ('ven-06', 'Court 1', 'Hard Court Acrylic'),
+    ('ven-07', 'Practice Pitch 1', 'Natural Turf'),
+    ('ven-08', 'Court 1', 'Hardwood'),
+    ('ven-09', 'Court 1', 'Synthetic Padel Turf'),
+    ('ven-10', 'Table 1', 'Synthetic Table Tennis Mat'),
+    ('ven-11', 'Court 1', 'Glassback Squash Court')
+) AS sample(venue_id, name, type)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.courts c
+    WHERE c.venue_id = sample.venue_id AND c.name = sample.name
+);
 
 
 
@@ -285,8 +305,14 @@ BEGIN
     IF COALESCE(auth.role(), '') = 'authenticated' THEN
         IF TG_OP = 'UPDATE' THEN
             NEW.role := OLD.role;
+            IF current_setting('sportsbook.wallet_update', true) IS DISTINCT FROM 'allowed' THEN
+                NEW.wallet_balance := OLD.wallet_balance;
+            END IF;
         ELSIF NEW.role = 'admin' THEN
             NEW.role := 'player';   -- nobody can create themselves as admin
+        END IF;
+        IF TG_OP = 'INSERT' THEN
+            NEW.wallet_balance := 0;
         END IF;
     END IF;
     RETURN NEW;
@@ -623,9 +649,11 @@ CREATE POLICY "Venue images are readable" ON storage.objects FOR SELECT
     USING (bucket_id = 'venue-images');
 
 -- ------------------------------------------------------------------------------
--- 14. ADMIN ACCOUNT (run once; the account is created from the app / sign-up)
+-- 14. OWNER / ADMIN ACCOUNTS
 -- ------------------------------------------------------------------------------
-UPDATE public.profiles SET role = 'admin' WHERE email = 'admin@sportsbook.test';
+-- Create owner accounts using the app's Court Owner registration option.
+-- To grant global admin access, first create and verify an account, then run:
+-- UPDATE public.profiles SET role = 'admin' WHERE email = 'your-admin-email@example.com';
 
 
 -- ############ PART 3: OWNER SCHEDULE, WALK-INS, LEDGER ############
@@ -772,6 +800,7 @@ BEGIN
     IF NOT EXISTS (SELECT 1 FROM public.profiles p WHERE p.id = auth.uid() AND p.role IN ('owner', 'admin')) THEN
         RAISE EXCEPTION 'Only owners can charge a customer wallet';
     END IF;
+    PERFORM set_config('sportsbook.wallet_update', 'allowed', true);
     UPDATE public.profiles SET wallet_balance = wallet_balance - p_amount
     WHERE id = p_user AND wallet_balance >= p_amount AND p_amount > 0
     RETURNING wallet_balance INTO new_balance;
@@ -795,7 +824,8 @@ CREATE POLICY "Owners read their customers" ON public.profiles FOR SELECT
 -- Ledger: refunds and shift reconciliation
 -- ------------------------------------------------------------------------------
 ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ;
-ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS refund_method TEXT;   -- 'wallet' | 'card'
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS refund_method TEXT;   -- 'wallet' | 'cash'
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 
 CREATE OR REPLACE FUNCTION public.credit_customer_wallet(p_user UUID, p_amount NUMERIC)
 RETURNS NUMERIC
@@ -812,6 +842,7 @@ BEGIN
     IF p_amount <= 0 THEN
         RAISE EXCEPTION 'Invalid refund amount';
     END IF;
+    PERFORM set_config('sportsbook.wallet_update', 'allowed', true);
     UPDATE public.profiles SET wallet_balance = wallet_balance + p_amount WHERE id = p_user
     RETURNING wallet_balance INTO new_balance;
     RETURN new_balance;
@@ -837,3 +868,75 @@ DROP POLICY IF EXISTS "Owners manage shift closures" ON public.shift_closures;
 CREATE POLICY "Owners manage shift closures" ON public.shift_closures FOR ALL
     USING (EXISTS (SELECT 1 FROM public.venues v WHERE v.id = shift_closures.venue_id AND v.owner_id = auth.uid()))
     WITH CHECK (EXISTS (SELECT 1 FROM public.venues v WHERE v.id = shift_closures.venue_id AND v.owner_id = auth.uid()));
+
+-- Migration 004: enforce the venue hours owners set in the app.
+CREATE OR REPLACE FUNCTION public.prevent_double_booking()
+RETURNS TRIGGER
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    venue_open TIME;
+    venue_close TIME;
+    slot_label TEXT;
+    start_label TEXT;
+    end_label TEXT;
+    meridiem TEXT;
+    slot_start TIME;
+    slot_end TIME;
+BEGIN
+    IF NEW.status <> 'Cancelled' THEN
+        SELECT COALESCE(NULLIF(v.opening_time, ''), '06:00')::TIME,
+               COALESCE(NULLIF(v.closing_time, ''), '22:00')::TIME
+          INTO venue_open, venue_close
+          FROM public.venues v
+         WHERE v.id = NEW.venue_id;
+
+        IF venue_open IS NOT NULL AND venue_close IS NOT NULL THEN
+            FOREACH slot_label IN ARRAY string_to_array(NEW.time_slot, ', ') LOOP
+                start_label := split_part(slot_label, ' - ', 1);
+                end_label := split_part(slot_label, ' - ', 2);
+                meridiem := upper(right(trim(end_label), 2));
+                IF meridiem NOT IN ('AM', 'PM') OR end_label !~ '^\s*[0-9]{1,2}:[0-9]{2}\s+(AM|PM)$' THEN
+                    RAISE EXCEPTION 'Invalid time slot label: %', slot_label;
+                END IF;
+                slot_start := (to_timestamp(start_label || ' ' || meridiem, 'HH12:MI AM') AT TIME ZONE 'UTC')::TIME;
+                slot_end := (to_timestamp(end_label, 'HH12:MI AM') AT TIME ZONE 'UTC')::TIME;
+                IF slot_start < venue_open OR slot_end > venue_close THEN
+                    RAISE EXCEPTION 'This venue is open from % to %. Choose a time inside those hours.', venue_open, venue_close;
+                END IF;
+            END LOOP;
+        END IF;
+
+        IF EXISTS (
+            SELECT 1 FROM public.bookings b
+             WHERE b.venue_id = NEW.venue_id
+               AND b.court_name = NEW.court_name
+               AND b.date_schedule = NEW.date_schedule
+               AND b.status <> 'Cancelled'
+               AND b.id <> COALESCE(NEW.id, '')
+               AND string_to_array(b.time_slot, ', ') && string_to_array(NEW.time_slot, ', ')
+        ) THEN
+            RAISE EXCEPTION 'That time slot has just been booked by someone else. Please pick another.';
+        END IF;
+
+        IF NEW.source IS DISTINCT FROM 'walk_in' AND EXISTS (
+            SELECT 1 FROM public.slot_blocks k
+             WHERE k.venue_id = NEW.venue_id
+               AND k.court_name = NEW.court_name
+               AND k.date_schedule = NEW.date_schedule
+               AND (k.expires_at IS NULL OR k.expires_at > NOW())
+               AND k.time_slot = ANY (string_to_array(NEW.time_slot, ', '))
+        ) THEN
+            RAISE EXCEPTION 'That time slot is closed or blocked. Choose another time.';
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS prevent_double_booking ON public.bookings;
+CREATE TRIGGER prevent_double_booking
+    BEFORE INSERT OR UPDATE OF time_slot, date_schedule, court_name, status ON public.bookings
+    FOR EACH ROW EXECUTE FUNCTION public.prevent_double_booking();

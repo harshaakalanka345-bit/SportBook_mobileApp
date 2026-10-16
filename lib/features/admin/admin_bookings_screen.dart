@@ -67,11 +67,18 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
       if (!ok) return false;
       if (q.isEmpty) return true;
       final venue = (b['venues'] as Map?) ?? const {};
-      return '${b['booking_ref']}'.toLowerCase().contains(q) || '${b['qr_turnstile_pin']}'.contains(q) || '${b['court_name']}'.toLowerCase().contains(q) || '${venue['name']} ${venue['area']} ${venue['address']}'.toLowerCase().contains(q);
+      return '${b['booking_ref']}'.toLowerCase().contains(q) ||
+          '${b['qr_turnstile_pin']}'.contains(q) ||
+          '${b['court_name']}'.toLowerCase().contains(q) ||
+          '${venue['name']} ${venue['area']} ${venue['address']}'
+              .toLowerCase()
+              .contains(q);
     }).toList();
   }
 
-  double get _revenue => _visible.where((b) => b['status'] != 'Cancelled').fold(0.0, (s, b) => s + ((b['total_paid'] as num?)?.toDouble() ?? 0));
+  double get _revenue => _visible
+      .where((b) => b['status'] != 'Cancelled')
+      .fold(0.0, (s, b) => s + ((b['total_paid'] as num?)?.toDouble() ?? 0));
 
   Future<void> _setStatus(Map<String, dynamic> b, String status) async {
     try {
@@ -82,16 +89,22 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
       }
       await _load();
     } catch (e) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not update booking: $e'), backgroundColor: Colors.redAccent));
+      if (mounted)
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not update booking: $e'),
+            backgroundColor: Colors.redAccent,
+          ),
+        );
     }
   }
 
   Color _statusColor(String s) => switch (s) {
-        'Checked-in' => Colors.green,
-        'Cancelled' => Colors.redAccent,
-        'Rescheduled' => Colors.orange,
-        _ => AppColors.primary,
-      };
+    'Checked-in' => Colors.green,
+    'Cancelled' => Colors.redAccent,
+    'Rescheduled' => Colors.orange,
+    _ => AppColors.primary,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -104,30 +117,71 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
           child: ListView(
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
             children: [
-              Row(children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(8)),
-                  child: const Icon(Icons.calendar_month_rounded, color: Colors.white, size: 16),
-                ),
-                const SizedBox(width: 12),
-                const Expanded(
-                  child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text('OWNER CONSOLE', style: TextStyle(color: AppColors.primary, fontSize: 8, fontWeight: FontWeight.w800)),
-                    Text('Bookings', style: TextStyle(color: ink, fontSize: 18, fontWeight: FontWeight.w800)),
-                  ]),
-                ),
-                IconButton(onPressed: _load, icon: const Icon(Icons.refresh_rounded, color: ink)),
-                GestureDetector(
-                  onTap: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const AdminProfileScreen())),
-                  child: Container(
-                    width: 28,
-                    height: 28,
-                    decoration: const BoxDecoration(color: AppColors.primary, shape: BoxShape.circle),
-                    child: const Icon(Icons.person, color: Colors.white, size: 16),
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.primary,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.calendar_month_rounded,
+                      color: Colors.white,
+                      size: 16,
+                    ),
                   ),
-                ),
-              ]),
+                  const SizedBox(width: 12),
+                  const Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'OWNER CONSOLE',
+                          style: TextStyle(
+                            color: AppColors.primary,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          'Bookings',
+                          style: TextStyle(
+                            color: ink,
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _load,
+                    icon: const Icon(Icons.refresh_rounded, color: ink),
+                  ),
+                  GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const AdminProfileScreen(),
+                      ),
+                    ),
+                    child: Container(
+                      width: 28,
+                      height: 28,
+                      decoration: const BoxDecoration(
+                        color: AppColors.primary,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.person,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
               TextField(
                 controller: _search,
@@ -135,59 +189,134 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
                 decoration: InputDecoration(
                   hintText: 'Search booking ref, PIN or court…',
                   prefixIcon: const Icon(Icons.search_rounded),
-                  suffixIcon: _search.text.isEmpty ? null : IconButton(icon: const Icon(Icons.close), onPressed: () => setState(_search.clear)),
+                  suffixIcon: _search.text.isEmpty
+                      ? null
+                      : IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => setState(_search.clear),
+                        ),
                   filled: true,
                   fillColor: Colors.white,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(16),
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
               const SizedBox(height: 12),
-              Row(children: [
-                for (final f in const [('today', 'Today'), ('upcoming', 'Upcoming'), ('all', 'All')]) ...[
-                  ChoiceChip(
-                    label: Text(f.$2),
-                    selected: _filter == f.$1,
-                    showCheckmark: false,
-                    selectedColor: AppColors.primary,
-                    labelStyle: TextStyle(color: _filter == f.$1 ? Colors.white : ink, fontWeight: FontWeight.w600),
-                    onSelected: (_) => setState(() => _filter = f.$1),
-                  ),
-                  const SizedBox(width: 8),
+              Row(
+                children: [
+                  for (final f in const [
+                    ('today', 'Today'),
+                    ('upcoming', 'Upcoming'),
+                    ('all', 'All'),
+                  ]) ...[
+                    ChoiceChip(
+                      label: Text(f.$2),
+                      selected: _filter == f.$1,
+                      showCheckmark: false,
+                      selectedColor: AppColors.primary,
+                      labelStyle: TextStyle(
+                        color: _filter == f.$1 ? Colors.white : ink,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      onSelected: (_) => setState(() => _filter = f.$1),
+                    ),
+                    const SizedBox(width: 8),
+                  ],
                 ],
-              ]),
+              ),
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(color: AppColors.primary, borderRadius: BorderRadius.circular(20)),
-                child: Row(children: [
-                  Expanded(
-                    child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      const Text('BOOKINGS', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w800)),
-                      Text('${items.length}', style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
-                    ]),
-                  ),
-                  Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                    const Text('COLLECTED (LKR)', style: TextStyle(color: Colors.white70, fontSize: 9, fontWeight: FontWeight.w800)),
-                    Text(_revenue.toStringAsFixed(0), style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800)),
-                  ]),
-                ]),
+                decoration: BoxDecoration(
+                  color: AppColors.primary,
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'BOOKINGS',
+                            style: TextStyle(
+                              color: Colors.white70,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                          Text(
+                            '${items.length}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 26,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        const Text(
+                          'COLLECTED (LKR)',
+                          style: TextStyle(
+                            color: Colors.white70,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        Text(
+                          _revenue.toStringAsFixed(0),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 26,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
               const SizedBox(height: 16),
               if (_loading)
-                const Padding(padding: EdgeInsets.only(top: 40), child: Center(child: CircularProgressIndicator()))
+                const Padding(
+                  padding: EdgeInsets.only(top: 40),
+                  child: Center(child: CircularProgressIndicator()),
+                )
               else if (_error != null)
-                Column(children: [
-                  const SizedBox(height: 32),
-                  const Icon(Icons.cloud_off, size: 36, color: Colors.redAccent),
-                  const SizedBox(height: 8),
-                  Text('Could not load bookings\n$_error', textAlign: TextAlign.center, style: const TextStyle(color: muted, fontSize: 12)),
-                  const SizedBox(height: 12),
-                  FilledButton(onPressed: _load, child: const Text('Retry')),
-                ])
+                Column(
+                  children: [
+                    const SizedBox(height: 32),
+                    const Icon(
+                      Icons.cloud_off,
+                      size: 36,
+                      color: Colors.redAccent,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Could not load bookings\n$_error',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: muted, fontSize: 12),
+                    ),
+                    const SizedBox(height: 12),
+                    FilledButton(onPressed: _load, child: const Text('Retry')),
+                  ],
+                )
               else if (items.isEmpty)
                 const Padding(
                   padding: EdgeInsets.only(top: 40),
-                  child: Center(child: Text('No bookings match this view.\nRegister a complex and share it with players to start receiving bookings.', textAlign: TextAlign.center, style: TextStyle(color: muted, fontSize: 13))),
+                  child: Center(
+                    child: Text(
+                      'No bookings match this view.\nRegister a complex and share it with players to start receiving bookings.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: muted, fontSize: 13),
+                    ),
+                  ),
                 )
               else
                 for (final b in items) _card(b),
@@ -204,46 +333,112 @@ class _AdminBookingsScreenState extends State<AdminBookingsScreen> {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(18), border: Border.all(color: const Color(0xFFE9EEFF))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Row(children: [
-          Expanded(child: Text('${(b['venues'] as Map?)?['name'] ?? 'Venue'} • ${b['court_name']}', style: const TextStyle(color: ink, fontSize: 14, fontWeight: FontWeight.w800))),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-            decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-            child: Text(status, style: TextStyle(color: color, fontSize: 10, fontWeight: FontWeight.w800)),
-          ),
-        ]),
-        const SizedBox(height: 6),
-        Text('${b['date_schedule']} • ${b['time_slot']}', style: const TextStyle(color: muted, fontSize: 12)),
-        const SizedBox(height: 4),
-        Row(children: [
-          Text('${b['booking_ref']}', style: const TextStyle(color: AppColors.primary, fontSize: 11, fontWeight: FontWeight.w700)),
-          const SizedBox(width: 10),
-          Text('PIN ${b['qr_turnstile_pin']}', style: const TextStyle(color: muted, fontSize: 11)),
-          const Spacer(),
-          Text('LKR ${b['total_paid']}', style: const TextStyle(color: ink, fontSize: 13, fontWeight: FontWeight.w800)),
-        ]),
-        if (status != 'Cancelled' && status != 'Checked-in') ...[
-          const SizedBox(height: 12),
-          Row(children: [
-            Expanded(
-              child: FilledButton.icon(
-                onPressed: () => _setStatus(b, 'Checked-in'),
-                icon: const Icon(Icons.how_to_reg, size: 16),
-                label: const Text('Check in'),
-                style: FilledButton.styleFrom(backgroundColor: AppColors.primary),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(18),
+        border: Border.all(color: const Color(0xFFE9EEFF)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${(b['venues'] as Map?)?['name'] ?? 'Venue'} • ${b['court_name']}',
+                  style: const TextStyle(
+                    color: ink,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
               ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: color.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  status,
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Text(
+            '${b['date_schedule']} • ${b['time_slot']}',
+            style: const TextStyle(color: muted, fontSize: 12),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                '${b['booking_ref']}',
+                style: const TextStyle(
+                  color: AppColors.primary,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Text(
+                'PIN ${b['qr_turnstile_pin']}',
+                style: const TextStyle(color: muted, fontSize: 11),
+              ),
+              const Spacer(),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Text(
+                    'LKR ${SupabaseService.bookingAmountForDisplay(b).toStringAsFixed(0)}',
+                    style: const TextStyle(
+                      color: ink,
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  if (SupabaseService.bookingDueAtVenue(b))
+                    const Text(
+                      'Due at venue',
+                      style: TextStyle(color: muted, fontSize: 10),
+                    ),
+                ],
+              ),
+            ],
+          ),
+          if (status != 'Cancelled' && status != 'Checked-in') ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: FilledButton.icon(
+                    onPressed: () => _setStatus(b, 'Checked-in'),
+                    icon: const Icon(Icons.how_to_reg, size: 16),
+                    label: const Text('Check in'),
+                    style: FilledButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                OutlinedButton(
+                  onPressed: () => _setStatus(b, 'Cancelled'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.redAccent,
+                  ),
+                  child: const Text('Cancel'),
+                ),
+              ],
             ),
-            const SizedBox(width: 10),
-            OutlinedButton(
-              onPressed: () => _setStatus(b, 'Cancelled'),
-              style: OutlinedButton.styleFrom(foregroundColor: Colors.redAccent),
-              child: const Text('Cancel'),
-            ),
-          ]),
+          ],
         ],
-      ]),
+      ),
     );
   }
 }

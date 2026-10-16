@@ -251,7 +251,7 @@ class _AuthScreenState extends State<AuthScreen> {
               if (emailController.text.trim().isEmpty) return;
               try {
                 await _service.resetPassword(emailController.text.trim());
-                if (ctx.mounted) {
+                if (ctx.mounted && mounted) {
                   Navigator.pop(ctx);
                   ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Password reset link sent! Check your inbox.'), backgroundColor: Colors.green));
                 }

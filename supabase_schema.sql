@@ -36,7 +36,12 @@ VALUES
     ('ven-03', 'CR & FC Outdoor Courts', 'Tennis', 'Outdoor', 'Colombo 07', 2500, 'Malalasekara Mawatha, Colombo 07', ARRAY['Floodlights', 'Parking', 'Club House']),
     ('ven-04', 'Bambalapitiya Smash Courts', 'Badminton', 'Indoor', 'Colombo 04', 1600, 'Galle Road, Colombo 04', ARRAY['Air Conditioned', 'Changing Rooms', 'Refreshments']),
     ('ven-05', 'Futsal World Colombo', 'Futsal', 'Indoor', 'Colombo 10', 3200, 'T.B. Jayah Mawatha, Colombo 10', ARRAY['Locker Rooms', 'Showers', 'Parking', 'Floodlights']),
-    ('ven-06', 'Otters Aquatic Club Tennis', 'Tennis', 'Outdoor', 'Colombo 07', 2200, 'Bauddhaloka Mawatha, Colombo 07', ARRAY['Floodlights', 'Showers', 'Cafeteria'])
+    ('ven-06', 'Otters Aquatic Club Tennis', 'Tennis', 'Outdoor', 'Colombo 07', 2200, 'Bauddhaloka Mawatha, Colombo 07', ARRAY['Floodlights', 'Showers', 'Cafeteria']),
+    ('ven-07', 'Colombo Cricket Nets', 'Cricket', 'Outdoor', 'Colombo 05', 3000, 'Havelock Road, Colombo 05', ARRAY['Parking', 'Changing Rooms', 'Floodlights']),
+    ('ven-08', 'Colombo Hoop Arena', 'Basketball', 'Indoor', 'Colombo 03', 2800, 'Duplication Road, Colombo 03', ARRAY['Air Conditioned', 'Changing Rooms', 'Drinking Water']),
+    ('ven-09', 'Padel Colombo', 'Padel', 'Outdoor', 'Colombo 02', 3500, 'Union Place, Colombo 02', ARRAY['Parking', 'Floodlights', 'Showers']),
+    ('ven-10', 'Colombo Table Tennis Centre', 'Table Tennis', 'Indoor', 'Colombo 06', 1800, 'Marine Drive, Colombo 06', ARRAY['Air Conditioned', 'Changing Rooms', 'Cafeteria']),
+    ('ven-11', 'Colombo Squash Centre', 'Squash', 'Indoor', 'Colombo 03', 2200, 'Alfred House Gardens, Colombo 03', ARRAY['Air Conditioned', 'Changing Rooms', 'Showers'])
 ON CONFLICT (id) DO UPDATE SET
     environment = EXCLUDED.environment,
     sport = EXCLUDED.sport,
@@ -48,7 +53,7 @@ ON CONFLICT (id) DO UPDATE SET
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL DEFAULT 'SportsBook Member',
-    wallet_balance NUMERIC NOT NULL DEFAULT 2500,
+    wallet_balance NUMERIC NOT NULL DEFAULT 0,
     email TEXT,
     phone TEXT,
     avatar_url TEXT,
@@ -93,7 +98,7 @@ BEGIN
         ALTER TABLE public.profiles ADD COLUMN full_name TEXT NOT NULL DEFAULT 'SportsBook Member';
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'wallet_balance') THEN
-        ALTER TABLE public.profiles ADD COLUMN wallet_balance NUMERIC NOT NULL DEFAULT 2500;
+        ALTER TABLE public.profiles ADD COLUMN wallet_balance NUMERIC NOT NULL DEFAULT 0;
     END IF;
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'profiles' AND column_name = 'email') THEN
         ALTER TABLE public.profiles ADD COLUMN email TEXT;
@@ -102,6 +107,8 @@ BEGIN
         ALTER TABLE public.profiles ADD COLUMN phone TEXT;
     END IF;
 END $$;
+
+ALTER TABLE public.profiles ALTER COLUMN wallet_balance SET DEFAULT 0;
 
 ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY;
 
@@ -137,6 +144,8 @@ CREATE TABLE IF NOT EXISTS public.bookings (
     addons JSONB DEFAULT '[]'::jsonb,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.bookings ADD COLUMN IF NOT EXISTS cancel_reason TEXT;
 
 ALTER TABLE public.bookings ENABLE ROW LEVEL SECURITY;
 
@@ -199,10 +208,25 @@ CREATE POLICY "Allow create and update courts"
     ON public.courts FOR ALL
     USING (true);
 
--- Seed initial courts for ven-01
+-- Seed bookable sample courts for every sport. The pair check keeps this safe to rerun.
 INSERT INTO public.courts (venue_id, name, type)
-VALUES
+SELECT sample.venue_id, sample.name, sample.type
+FROM (VALUES
     ('ven-01', 'Court 1', 'Premium Teak Parquet Floor'),
-    ('ven-01', 'Court 2', 'Synthetic Indoor Shoe Rubber')
-ON CONFLICT DO NOTHING;
+    ('ven-01', 'Court 2', 'Synthetic Indoor Shoe Rubber'),
+    ('ven-02', 'Court 1', 'Synthetic Indoor Shoe Rubber'),
+    ('ven-03', 'Court 1', 'Hard Court Acrylic'),
+    ('ven-04', 'Court 1', 'Wooden Parquet'),
+    ('ven-05', 'Pitch 1', 'Synthetic Turf'),
+    ('ven-06', 'Court 1', 'Hard Court Acrylic'),
+    ('ven-07', 'Practice Pitch 1', 'Natural Turf'),
+    ('ven-08', 'Court 1', 'Hardwood'),
+    ('ven-09', 'Court 1', 'Synthetic Padel Turf'),
+    ('ven-10', 'Table 1', 'Synthetic Table Tennis Mat'),
+    ('ven-11', 'Court 1', 'Glassback Squash Court')
+) AS sample(venue_id, name, type)
+WHERE NOT EXISTS (
+    SELECT 1 FROM public.courts c
+    WHERE c.venue_id = sample.venue_id AND c.name = sample.name
+);
 
